@@ -115,7 +115,7 @@ export function useCloudSync(
     if (error) {
       setStatus('エラー');
       setMessage(error.message === 'Failed to fetch'
-        ? `Supabase（${supabaseHost || '接続先不明'}）へ接続できません。VercelのURLを確認し、VPNやコンテンツブロッカーをオフにして再試行してください。`
+        ? `クラウド中継へ接続できません。ページを再読み込みして再試行してください（接続先: ${supabaseHost || '不明'}）。`
         : `ログインメールを送信できませんでした: ${error.message}`);
     } else {
       setStatus('未ログイン');

@@ -21,8 +21,9 @@ export const supabaseHost = (() => {
 
 export function getSupabaseClient() {
   if (client !== undefined) return client;
+  const clientUrl = typeof window === 'undefined' ? supabaseUrl : `${window.location.origin}/api/supabase`;
   client = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey, {
+    ? createClient(clientUrl, supabaseKey, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
       })
     : null;

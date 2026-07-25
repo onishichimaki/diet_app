@@ -70,7 +70,7 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
 
-`Failed to fetch`が表示された場合は、VercelのURLがProject URLだけになっているか確認し、VPNやコンテンツブロッカーを一時的に無効化します。Service WorkerはSupabaseを含む外部オリジンの通信には介入しません。
+ブラウザとSupabase間のネットワーク制限やCORSの影響を避けるため、Supabase SDKの通信は同一オリジンの`/api/supabase/*`から固定されたProject URLへ中継します。中継先は環境変数のSupabase URL以外に変更できず、Service WorkerもAPI通信には介入しません。
 
 ## 技術構成
 
