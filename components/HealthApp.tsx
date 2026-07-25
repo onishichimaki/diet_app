@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, BedDouble, Download, Footprints, Home, Plus, RotateCcw, Target, Trash2, Utensils, Weight, X } from 'lucide-react';
-import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, exerciseMinutes, loadHealthStore, periodRecords, sampleStore, storageKey, totals } from '@/lib/health';
+import { Activity, Apple, BarChart3, Download, Dumbbell, Flame, Home, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Target, Trash2, Weight, X } from 'lucide-react';
+import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, sampleStore, storageKey, totals } from '@/lib/health';
 
 type Tab = '今日' | '記録' | 'レポート' | '目標';
 type Modal = 'meal' | 'exercise' | null;
@@ -32,11 +32,11 @@ export default function HealthApp() {
     updateDay({ ...day, exercises: [...day.exercises, exercise] }); setModal(null);
   };
 
-  return <main className="safe-bottom mx-auto min-h-screen max-w-lg bg-cream">
+  return <main className="safe-bottom mx-auto min-h-screen max-w-lg overflow-hidden bg-[#f5f7fa]">
     <Header date={selectedDate} tab={tab} onDate={setSelectedDate} />
     {store.sample && <div className="mx-5 mb-4 flex items-center justify-between rounded-2xl bg-lime/20 px-4 py-3 text-sm"><span><b>サンプルデータ</b>を表示中</span><button className="font-bold text-leaf" onClick={() => setStore({ ...sampleStore, records: {}, sample: false })}>空で始める</button></div>}
     <div className="space-y-5 px-5">
-      {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} />}
+      {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} />}
       {tab === '記録' && <Records day={day} updateDay={updateDay} open={setModal} />}
       {tab === 'レポート' && <Reports store={store} date={selectedDate} />}
       {tab === '目標' && <Settings store={store} setStore={setStore} />}
@@ -48,40 +48,103 @@ export default function HealthApp() {
 }
 
 function Header({ date, tab, onDate }: { date: string; tab: Tab; onDate: (date: string) => void }) {
-  const label = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'full' }).format(new Date(`${date}T12:00:00`));
-  return <header className="px-5 pb-4 pt-7"><div className="flex items-end justify-between"><div><p className="text-sm text-gray-500">{label}</p><h1 className="text-2xl font-bold">{tab === '今日' ? '今日も健やかに' : tab}</h1></div><label className="text-xs font-semibold text-leaf">日付<input aria-label="表示する日付" className="block rounded-lg border bg-white p-2 text-ink" type="date" value={date} onChange={e => onDate(e.target.value)} /></label></div></header>;
+  const label = new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date(`${date}T12:00:00`));
+  return <header className="premium-header px-5 pb-5 pt-7">
+    <div className="flex items-center justify-between">
+      <div><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-700">Health Pocket</p><h1 className="mt-1 text-[28px] font-bold tracking-tight">{tab === '今日' ? 'Premium' : tab}</h1></div>
+      <button aria-label="その他のメニュー" className="grid h-12 w-12 place-items-center rounded-full bg-white/70 text-slate-600 shadow-sm"><MoreHorizontal /></button>
+    </div>
+    <div className="mt-4 flex items-center justify-between"><p className="text-sm font-semibold text-slate-500">{label}</p><label className="date-pill">日付<input aria-label="表示する日付" type="date" value={date} onChange={e => { if (e.target.value) onDate(e.target.value); }} /></label></div>
+  </header>;
 }
 
-function Dashboard({ day, goals, nutrients }: { day: DayRecord; goals: Goals; nutrients: ReturnType<typeof totals> }) {
-  const percent = Math.min(100, nutrients.kcal / goals.kcal * 100);
+function Dashboard({ day, goals, nutrients, onRecord }: { day: DayRecord; goals: Goals; nutrients: ReturnType<typeof totals>; onRecord: () => void }) {
+  const stepPercent = Math.min(100, day.steps / goals.steps * 100);
+  const caloriePercent = Math.min(100, nutrients.kcal / goals.kcal * 100);
+  const burned = day.exercises.reduce((sum, item) => sum + item.kcal, 0);
   return <>
-    <section className="card p-5"><p className="text-sm font-semibold text-leaf">今日のエネルギー</p><div className="mt-3 flex items-center justify-between"><div><p className="text-3xl font-bold">{nutrients.kcal.toLocaleString()} <span className="text-sm font-normal text-gray-400">kcal</span></p><p className="mt-1 text-sm text-gray-500">目標まで {Math.max(0, goals.kcal - nutrients.kcal)} kcal</p></div><div aria-label={`カロリー目標の${Math.round(percent)}%`} className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(#3d7a5a ${percent}%,#edf0eb 0)` }}><div className="grid h-20 w-20 place-items-center rounded-full bg-white font-bold">{Math.round(percent)}%</div></div></div><div className="mt-5 grid grid-cols-3 border-t pt-4 text-center"><Macro value={nutrients.protein} label="たんぱく質" /><Macro value={nutrients.fat} label="脂質" /><Macro value={nutrients.carbs} label="炭水化物" /></div></section>
-    <h2 className="text-lg font-bold">からだの記録</h2><div className="grid grid-cols-2 gap-3"><Metric icon={<Weight />} label="体重" value={day.weight === null ? '未記録' : `${day.weight} kg`} /><Metric icon={<Footprints />} label="歩数・距離" value={`${day.steps.toLocaleString()}歩`} note={`${day.distance} km`} /><Metric icon={<Activity />} label="運動" value={`${exerciseMinutes(day)} 分`} note={`${day.exercises.length}件`} /><Metric icon={<BedDouble />} label="睡眠" value={day.sleep === null ? '未記録' : `${day.sleep} 時間`} /></div>
-    <MealList meals={day.meals} />
+    <section className="hero-grid">
+      <div className="step-ring" style={{ '--progress': `${stepPercent * 3.6}deg` } as React.CSSProperties}>
+        <div className="step-ring-inner"><span>歩数</span><strong>{day.steps.toLocaleString()}</strong><small>目標 {goals.steps.toLocaleString()}</small></div>
+      </div>
+      <div className="space-y-2.5">
+        <DashboardTile tone="lavender" icon={<MoonStar />} label="睡眠時間" value={day.sleep === null ? 'データなし' : `${day.sleep} 時間`} />
+        <DashboardTile tone="amber" icon={<Weight />} label="体重" value={day.weight === null ? '未記録' : `${day.weight} kg`} note={`目標 ${goals.weight} kg`} />
+        <DashboardTile tone="aqua" icon={<Flame />} label="消費カロリー" value={`${burned.toLocaleString()} kcal`} progress={burned / 500 * 100} />
+      </div>
+    </section>
+    <section className="metric-grid">
+      <DashboardTile tone="sky" icon={<Apple />} label="炭水化物" value={`${nutrients.carbs} g`} />
+      <DashboardTile tone="blue" icon={<Apple />} label="摂取カロリー" value={`${nutrients.kcal.toLocaleString()} kcal`} note={`あと ${Math.max(0, goals.kcal - nutrients.kcal)}`} progress={caloriePercent} />
+      <DashboardTile tone="sky" icon={<Apple />} label="たんぱく質" value={`${nutrients.protein} g`} />
+      <DashboardTile tone="sky" icon={<Apple />} label="脂質" value={`${nutrients.fat} g`} />
+      <DashboardTile tone="mint" icon={<Dumbbell />} label="エクササイズ" value={`${day.exercises.length}/3`} progress={day.exercises.length / 3 * 100} />
+      <DashboardTile tone="mint" icon={<Ruler />} label="距離" value={`${day.distance} km`} progress={day.distance / 8 * 100} />
+    </section>
+    <div className="grid grid-cols-2 gap-3"><button onClick={onRecord} className="action-button"><Plus />記録</button><button onClick={onRecord} className="action-button"><Activity />開始</button></div>
+    <section className="insight-card"><div className="flex items-center gap-2 text-cyan-700"><Sparkles size={18}/><span className="text-xs font-bold">今日のインサイト</span></div><h2>{nutrients.protein}gのタンパク質摂取、今日もいい調子です</h2><p>栄養と活動のバランスが整っています。あと少し歩くと今日の歩数目標を達成できます。</p></section>
   </>;
 }
-const Macro = ({ value, label }: { value: number; label: string }) => <div><b>{value}g</b><p className="text-[11px] text-gray-400">{label}</p></div>;
-const Metric = ({ icon, label, value, note }: { icon: React.ReactNode; label: string; value: string; note?: string }) => <div className="card p-4"><div className="mb-3 text-leaf">{icon}</div><p className="text-xs text-gray-500">{label}</p><b className="text-lg">{value}</b>{note && <p className="text-xs text-gray-400">{note}</p>}</div>;
+
+function DashboardTile({ tone, icon, label, value, note, progress }: { tone: string; icon: React.ReactNode; label: string; value: string; note?: string; progress?: number }) {
+  return <div className={`dashboard-tile ${tone}`}><span className="tile-icon">{icon}</span><div className="min-w-0"><p>{label}</p><strong>{value}</strong>{note && <small>{note}</small>}</div>{progress !== undefined && <i style={{ width: `${Math.min(100, progress)}%` }} />}</div>;
+}
 
 function Records({ day, updateDay, open }: { day: DayRecord; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void }) {
+  const nutrients = totals(day.meals);
   return <>
-    <div className="grid grid-cols-2 gap-3"><button onClick={() => open('meal')} className="flex items-center justify-center gap-2 rounded-2xl bg-leaf p-4 font-bold text-white"><Utensils size={19} />食事を追加</button><button onClick={() => open('exercise')} className="flex items-center justify-center gap-2 rounded-2xl bg-ink p-4 font-bold text-white"><Activity size={19} />運動を追加</button></div>
+    <div className="record-toolbar"><div><p>今日</p><h2>飲食物</h2></div><button onClick={() => open('meal')} aria-label="食事を追加"><Plus /></button></div>
+    <div className="record-period"><button className="active">日</button><button>週</button><button>月</button><button>3か月</button><button>年</button></div>
+    <section className="nutrition-panel"><div className="flex items-center justify-between"><h2>主要栄養素の目標</h2><span>全栄養素を見る</span></div><p className="nutrition-copy">炭水化物、たんぱく質、脂質のバランスを保つことは、体力や気力の維持と回復に重要です。</p><NutrientProgress label="炭水化物" value={nutrients.carbs} goal={207} color="#05617a" /><NutrientProgress label="脂質" value={nutrients.fat} goal={50} color="#a1262c" /><NutrientProgress label="たんぱく質" value={nutrients.protein} goal={108} color="#8a5b00" /></section>
+    <div className="meal-filters"><button className="active">✓ すべて</button>{MEAL_TYPES.map(type => <button key={type}>{type}</button>)}</div>
     <MealList meals={day.meals} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
+    <button onClick={() => open('exercise')} className="action-button dark"><Activity size={19} />運動を追加</button>
     <section className="card p-5"><h2 className="font-bold">運動記録</h2>{day.exercises.length === 0 ? <Empty /> : day.exercises.map(item => <div className="mt-3 flex items-center justify-between border-t pt-3" key={item.id}><div><b>{item.name}</b><p className="text-sm text-gray-500">{item.minutes}分・{item.kcal} kcal</p></div><DeleteButton label={`${item.name}を削除`} onClick={() => updateDay({ ...day, exercises: day.exercises.filter(exercise => exercise.id !== item.id) })} /></div>)}</section>
     <section className="card p-5"><h2 className="font-bold">測定値</h2><div className="mt-4 grid grid-cols-2 gap-3"><NumberField label="体重 (kg)" value={day.weight ?? ''} max={500} set={value => updateDay({ ...day, weight: value || null })} /><NumberField label="歩数" value={day.steps} max={200000} set={value => updateDay({ ...day, steps: value })} /><NumberField label="距離 (km)" value={day.distance} max={1000} set={value => updateDay({ ...day, distance: value })} /><NumberField label="睡眠 (時間)" value={day.sleep ?? ''} max={24} set={value => updateDay({ ...day, sleep: value || null })} /></div></section>
   </>;
 }
 
+function NutrientProgress({ label, value, goal, color }: { label: string; value: number; goal: number; color: string }) {
+  const percent = value / goal * 100; const status = percent < 75 ? '範囲より下' : percent > 120 ? '範囲超過' : '範囲内';
+  return <div className="nutrient-progress"><div><b>{label} · {Math.round(percent)}% · {value}/{goal} g</b><span className={status === '範囲内' ? 'good' : ''}>{status}</span></div><div className="track"><i style={{ width: `${Math.min(100, percent)}%`, background: color }} /><em style={{ left: `${Math.min(92, 100)}%` }} /></div></div>;
+}
+
 function MealList({ meals, remove }: { meals: Meal[]; remove?: (id: string) => void }) {
-  return <section className="card p-5"><h2 className="mb-2 font-bold">食事記録</h2>{MEAL_TYPES.map(type => { const list = meals.filter(meal => meal.type === type); return <div key={type} className="border-t py-3 first:border-0"><div className="flex justify-between"><b className="text-sm">{type}</b><span className="text-sm text-gray-400">{list.reduce((sum, item) => sum + item.kcal, 0)} kcal</span></div>{list.length === 0 ? <p className="mt-1 text-sm text-gray-300">まだ記録がありません</p> : list.map(meal => <div key={meal.id} className="mt-2 flex items-center justify-between"><div><p className="text-sm">{meal.name}</p><p className="text-xs text-gray-400">P {meal.protein} / F {meal.fat} / C {meal.carbs}</p></div>{remove && <DeleteButton label={`${meal.name}を削除`} onClick={() => remove(meal.id)} />}</div>)}</div>; })}</section>;
+  return <section className="meal-list">{MEAL_TYPES.map(type => {
+    const list = meals.filter(meal => meal.type === type);
+    const kcal = list.reduce((sum, item) => sum + item.kcal, 0);
+    return <details key={type} open={list.length > 0}>
+      <summary><div><b>{type}</b><span>{list.length}個のアイテム</span></div><strong>{kcal.toLocaleString()} kcal</strong></summary>
+      {list.length === 0 ? <Empty /> : list.map(meal => <div className="meal-row" key={meal.id}><div><p>{meal.name}</p><small>P {meal.protein} · F {meal.fat} · C {meal.carbs}</small></div>{remove && <DeleteButton label={`${meal.name}を削除`} onClick={() => remove(meal.id)} />}</div>)}
+    </details>;
+  })}</section>;
 }
 
 function Reports({ store, date }: { store: HealthStore; date: string }) {
   const [period, setPeriod] = useState<'日' | '週' | '月'>('週');
-  const records = periodRecords(store, date, period); const calories = records.map(day => totals(day.meals).kcal); const max = Math.max(...calories, store.goals.kcal, 1); const avgWeight = average(records.map(day => day.weight)); const avgSleep = average(records.map(day => day.sleep)); const avgSteps = average(records.map(day => day.steps));
-  return <><div className="grid grid-cols-3 rounded-xl bg-white p-1">{(['日', '週', '月'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={`rounded-lg p-2 text-sm ${period === value ? 'bg-leaf font-bold text-white' : ''}`}>{value}</button>)}</div><section className="card p-5"><p className="text-sm text-gray-500">{period}間カロリー推移</p><div className="mt-6 flex h-40 items-end gap-1 border-b" aria-label={`${period}間のカロリー棒グラフ`}>{records.map((day, index) => <div title={`${day.date}: ${calories[index]} kcal`} key={day.date} className="min-w-1 flex-1 rounded-t bg-leaf/80" style={{ height: `${Math.max(2, calories[index] / max * 100)}%` }} />)}</div><div className="mt-4 grid grid-cols-2 gap-3"><Summary label="平均カロリー" value={`${Math.round(average(calories))} kcal`} /><Summary label="平均歩数" value={`${Math.round(avgSteps).toLocaleString()} 歩`} /><Summary label="平均体重" value={avgWeight ? `${avgWeight.toFixed(1)} kg` : '未記録'} /><Summary label="平均睡眠" value={avgSleep ? `${avgSleep.toFixed(1)} 時間` : '未記録'} /></div></section></>;
+  const records = periodRecords(store, date, period);
+  const calories = records.map(day => totals(day.meals).kcal);
+  const values = {
+    carbs: records.map(day => totals(day.meals).carbs), protein: records.map(day => totals(day.meals).protein), fat: records.map(day => totals(day.meals).fat), calories,
+    burned: records.map(day => day.exercises.reduce((sum, item) => sum + item.kcal, 0)), exercise: records.map(day => day.exercises.length), steps: records.map(day => day.steps), distance: records.map(day => day.distance),
+  };
+  return <><div className="period-tabs">{(['日', '週', '月'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={period === value ? 'active' : ''}>{value}</button>)}</div><div className="report-grid">
+    <TrendCard title="炭水化物" value={`${Math.round(average(values.carbs))} g`} values={values.carbs} status="範囲内" />
+    <TrendCard title="たんぱく質" value={`${Math.round(average(values.protein))} g`} values={values.protein} status="目標まで少し" />
+    <TrendCard title="脂質" value={`${Math.round(average(values.fat))} g`} values={values.fat} status="範囲内" />
+    <TrendCard title="摂取カロリー" value={`${Math.round(average(calories)).toLocaleString()} kcal`} values={calories} status="良好" bars />
+    <TrendCard title="消費カロリー" value={`${Math.round(average(values.burned))} kcal`} values={values.burned} status="活動的" bars />
+    <TrendCard title="エクササイズした日" value={`${values.exercise.filter(Boolean).length}/${records.length}`} values={values.exercise} status="継続中" bars />
+    <TrendCard title="歩数" value={`${Math.round(average(values.steps)).toLocaleString()}`} values={values.steps} status="あと少し" />
+    <TrendCard title="距離" value={`${average(values.distance).toFixed(1)} km`} values={values.distance} status="良好" />
+  </div></>;
 }
-const Summary = ({ label, value }: { label: string; value: string }) => <div className="rounded-xl bg-cream p-3"><p className="text-xs text-gray-500">{label}</p><b>{value}</b></div>;
+
+function TrendCard({ title, value, values, status, bars }: { title: string; value: string; values: number[]; status: string; bars?: boolean }) {
+  const max = Math.max(...values, 1); const points = values.slice(-7);
+  return <article className="trend-card"><p>{title}</p><strong>{value}</strong><div className={`mini-chart ${bars ? 'bars' : ''}`}>{points.map((item, index) => <i key={index} style={{ height: `${Math.max(8, item / max * 100)}%` }} />)}</div><span>{status}</span></article>;
+}
+
 
 function Settings({ store, setStore }: { store: HealthStore; setStore: (store: HealthStore) => void }) {
   const setGoal = (key: keyof Goals, value: number) => setStore({ ...store, sample: false, goals: { ...store.goals, [key]: value } });
