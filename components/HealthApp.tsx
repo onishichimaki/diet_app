@@ -1,16 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Apple, BarChart3, Download, Dumbbell, Flame, Home, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Target, Trash2, Weight, X } from 'lucide-react';
+import { Activity, Apple, ArrowLeft, CalendarDays, Download, Dumbbell, Flame, HeartPulse, Home, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
 import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, sampleStore, storageKey, totals } from '@/lib/health';
 
 type Tab = '今日' | '記録' | 'レポート' | '目標';
 type Modal = 'meal' | 'exercise' | null;
-const tabs: Array<[Tab, typeof Home]> = [['今日', Home], ['記録', Plus], ['レポート', BarChart3], ['目標', Target]];
+const tabs: Array<[Tab, typeof Home, string]> = [['今日', Home, '今日'], ['記録', Activity, 'フィットネス'], ['レポート', MoonStar, '睡眠'], ['目標', HeartPulse, '健康']];
 const fieldClass = 'mt-1 w-full rounded-xl border border-gray-200 bg-white p-3 text-base focus:border-leaf focus:ring-2 focus:ring-leaf/20';
 
-export default function HealthApp() {
-  const [tab, setTab] = useState<Tab>('今日');
+export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [selectedDate, setSelectedDate] = useState(dateKey());
   const [store, setStore] = useState<HealthStore>(sampleStore);
   const [loaded, setLoaded] = useState(false);
@@ -49,12 +49,10 @@ export default function HealthApp() {
 
 function Header({ date, tab, onDate }: { date: string; tab: Tab; onDate: (date: string) => void }) {
   const label = new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date(`${date}T12:00:00`));
-  return <header className="premium-header px-5 pb-5 pt-7">
-    <div className="flex items-center justify-between">
-      <div><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-700">Health Pocket</p><h1 className="mt-1 text-[28px] font-bold tracking-tight">{tab === '今日' ? 'Premium' : tab}</h1></div>
-      <button aria-label="その他のメニュー" className="grid h-12 w-12 place-items-center rounded-full bg-white/70 text-slate-600 shadow-sm"><MoreHorizontal /></button>
-    </div>
-    <div className="mt-4 flex items-center justify-between"><p className="text-sm font-semibold text-slate-500">{label}</p><label className="date-pill">日付<input aria-label="表示する日付" type="date" value={date} onChange={e => { if (e.target.value) onDate(e.target.value); }} /></label></div>
+  const title = tab === '記録' ? '飲食物' : tab === '目標' ? '目標' : 'Premium';
+  return <header className="premium-header px-5 pb-5 pt-10">
+    <div className="header-main"><button aria-label="戻る" className="header-circle"><ArrowLeft /></button><h1>{title}</h1><button aria-label="その他のメニュー" className="header-circle avatar"><MoreHorizontal /></button></div>
+    <div className="mt-4 flex items-center justify-between"><p className="text-sm font-semibold text-slate-500">{label}</p><label className="date-pill"><CalendarDays size={16}/><input aria-label="表示する日付" type="date" value={date} onChange={e => { if (e.target.value) onDate(e.target.value); }} /></label></div>
   </header>;
 }
 
@@ -64,7 +62,7 @@ function Dashboard({ day, goals, nutrients, onRecord }: { day: DayRecord; goals:
   const burned = day.exercises.reduce((sum, item) => sum + item.kcal, 0);
   return <>
     <section className="hero-grid">
-      <div className="step-ring" style={{ '--progress': `${stepPercent * 3.6}deg` } as React.CSSProperties}>
+      <div className="step-ring" style={{ '--progress': `${stepPercent * 2.8}deg` } as React.CSSProperties}>
         <div className="step-ring-inner"><span>歩数</span><strong>{day.steps.toLocaleString()}</strong><small>目標 {goals.steps.toLocaleString()}</small></div>
       </div>
       <div className="space-y-2.5">
@@ -91,13 +89,16 @@ function DashboardTile({ tone, icon, label, value, note, progress }: { tone: str
 }
 
 function Records({ day, updateDay, open }: { day: DayRecord; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void }) {
+  const [period, setPeriod] = useState('日');
+  const [mealFilter, setMealFilter] = useState<MealType | 'すべて'>('すべて');
   const nutrients = totals(day.meals);
+  const visibleMeals = mealFilter === 'すべて' ? day.meals : day.meals.filter(meal => meal.type === mealFilter);
   return <>
     <div className="record-toolbar"><div><p>今日</p><h2>飲食物</h2></div><button onClick={() => open('meal')} aria-label="食事を追加"><Plus /></button></div>
-    <div className="record-period"><button className="active">日</button><button>週</button><button>月</button><button>3か月</button><button>年</button></div>
+    <div className="record-period">{['日', '週', '月', '3か月', '年'].map(value => <button key={value} onClick={() => setPeriod(value)} className={period === value ? 'active' : ''}>{value}</button>)}</div>
     <section className="nutrition-panel"><div className="flex items-center justify-between"><h2>主要栄養素の目標</h2><span>全栄養素を見る</span></div><p className="nutrition-copy">炭水化物、たんぱく質、脂質のバランスを保つことは、体力や気力の維持と回復に重要です。</p><NutrientProgress label="炭水化物" value={nutrients.carbs} goal={207} color="#05617a" /><NutrientProgress label="脂質" value={nutrients.fat} goal={50} color="#a1262c" /><NutrientProgress label="たんぱく質" value={nutrients.protein} goal={108} color="#8a5b00" /></section>
-    <div className="meal-filters"><button className="active">✓ すべて</button>{MEAL_TYPES.map(type => <button key={type}>{type}</button>)}</div>
-    <MealList meals={day.meals} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
+    <div className="meal-filters"><button onClick={() => setMealFilter('すべて')} className={mealFilter === 'すべて' ? 'active' : ''}>✓ すべて</button>{MEAL_TYPES.map(type => <button onClick={() => setMealFilter(type)} className={mealFilter === type ? 'active' : ''} key={type}>{type}</button>)}</div>
+    <MealList meals={visibleMeals} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
     <button onClick={() => open('exercise')} className="action-button dark"><Activity size={19} />運動を追加</button>
     <section className="card p-5"><h2 className="font-bold">運動記録</h2>{day.exercises.length === 0 ? <Empty /> : day.exercises.map(item => <div className="mt-3 flex items-center justify-between border-t pt-3" key={item.id}><div><b>{item.name}</b><p className="text-sm text-gray-500">{item.minutes}分・{item.kcal} kcal</p></div><DeleteButton label={`${item.name}を削除`} onClick={() => updateDay({ ...day, exercises: day.exercises.filter(exercise => exercise.id !== item.id) })} /></div>)}</section>
     <section className="card p-5"><h2 className="font-bold">測定値</h2><div className="mt-4 grid grid-cols-2 gap-3"><NumberField label="体重 (kg)" value={day.weight ?? ''} max={500} set={value => updateDay({ ...day, weight: value || null })} /><NumberField label="歩数" value={day.steps} max={200000} set={value => updateDay({ ...day, steps: value })} /><NumberField label="距離 (km)" value={day.distance} max={1000} set={value => updateDay({ ...day, distance: value })} /><NumberField label="睡眠 (時間)" value={day.sleep ?? ''} max={24} set={value => updateDay({ ...day, sleep: value || null })} /></div></section>
@@ -142,7 +143,8 @@ function Reports({ store, date }: { store: HealthStore; date: string }) {
 
 function TrendCard({ title, value, values, status, bars }: { title: string; value: string; values: number[]; status: string; bars?: boolean }) {
   const max = Math.max(...values, 1); const points = values.slice(-7);
-  return <article className="trend-card"><p>{title}</p><strong>{value}</strong><div className={`mini-chart ${bars ? 'bars' : ''}`}>{points.map((item, index) => <i key={index} style={{ height: `${Math.max(8, item / max * 100)}%` }} />)}</div><span>{status}</span></article>;
+  const coordinates = points.map((item, index) => `${8 + index * (84 / Math.max(1, points.length - 1))},${76 - item / max * 62}`).join(' ');
+  return <article className="trend-card"><p>{title}</p><strong>{value}</strong>{bars ? <div className="mini-chart bars">{points.map((item, index) => <i key={index} style={{ height: `${Math.max(8, item / max * 100)}%` }} />)}</div> : <svg className="line-chart" viewBox="0 0 100 82" role="img" aria-label={`${title}の推移`}><line x1="0" y1="42" x2="100" y2="42" /><polyline points={coordinates}/>{points.map((item,index) => <circle key={index} cx={8 + index * (84 / Math.max(1, points.length - 1))} cy={76 - item / max * 62} r="3" />)}</svg>}<div className="week-labels"><i>木</i><i>金</i><i>土</i><i>日</i><i>月</i><i>火</i><i>水</i></div><span>{status}</span></article>;
 }
 
 
@@ -160,4 +162,4 @@ const ExerciseFields = () => <><label className="block text-sm font-semibold">�
 const NumberField = ({ label, value, max, set }: { label: string; value: number | ''; max: number; set: (value: number) => void }) => <label className="block text-sm font-semibold">{label}<input type="number" min="0" max={max} step="0.1" value={value} onChange={event => set(Number(event.target.value))} className={fieldClass} /></label>;
 const DeleteButton = ({ label, onClick }: { label: string; onClick: () => void }) => <button aria-label={label} onClick={onClick} className="rounded-full p-2 text-red-500"><Trash2 size={17} /></button>;
 const Empty = () => <p className="mt-3 text-sm text-gray-400">まだ記録がありません</p>;
-function BottomNav({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) { return <nav aria-label="メインナビゲーション" className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-lg -translate-x-1/2 justify-around border-t bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur">{tabs.map(([value, Icon]) => <button key={value} aria-current={tab === value ? 'page' : undefined} onClick={() => setTab(value)} className={`grid min-w-16 justify-items-center gap-1 p-2 text-xs ${tab === value ? 'font-bold text-leaf' : 'text-gray-400'}`}><Icon size={21} />{value}</button>)}</nav>; }
+function BottomNav({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) { return <nav aria-label="メインナビゲーション" className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-lg -translate-x-1/2 justify-around border-t bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur">{tabs.map(([value, Icon, label]) => <button key={value} aria-current={tab === value ? 'page' : undefined} onClick={() => setTab(value)} className={`grid min-w-16 justify-items-center gap-1 p-2 text-xs ${tab === value ? 'font-bold text-leaf' : 'text-gray-400'}`}><Icon size={22} />{label}</button>)}</nav>; }
