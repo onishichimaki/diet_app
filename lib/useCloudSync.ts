@@ -3,7 +3,7 @@
 import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { HealthStore, loadHealthStore } from './health';
-import { getSupabaseClient, supabaseConfigured } from './supabase';
+import { getSupabaseClient, supabaseConfigured, supabaseHost } from './supabase';
 
 export type CloudState = {
   configured: boolean;
@@ -114,7 +114,9 @@ export function useCloudSync(
     });
     if (error) {
       setStatus('エラー');
-      setMessage(`ログインメールを送信できませんでした: ${error.message}`);
+      setMessage(error.message === 'Failed to fetch'
+        ? `Supabase（${supabaseHost || '接続先不明'}）へ接続できません。VercelのURLを確認し、VPNやコンテンツブロッカーをオフにして再試行してください。`
+        : `ログインメールを送信できませんでした: ${error.message}`);
     } else {
       setStatus('未ログイン');
       setMessage('ログイン用リンクをメールで送りました');

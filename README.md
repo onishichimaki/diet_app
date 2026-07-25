@@ -70,6 +70,8 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
 
+`Failed to fetch`が表示された場合は、VercelのURLがProject URLだけになっているか確認し、VPNやコンテンツブロッカーを一時的に無効化します。Service WorkerはSupabaseを含む外部オリジンの通信には介入しません。
+
 ## 技術構成
 
 Next.js App Router / React / TypeScript / Tailwind CSS / Vitest。詳しくは[設計資料](docs/DESIGN.md)を参照してください。

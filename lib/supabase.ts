@@ -2,16 +2,27 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let client: SupabaseClient | null | undefined;
 
+export const normalizePublicEnv = (value: string | undefined) => {
+  if (!value) return '';
+  const unwrapped = value.trim().replace(/^['"]|['"]$/g, '');
+  return unwrapped.includes('=') ? unwrapped.slice(unwrapped.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '') : unwrapped;
+};
+
+const supabaseUrl = normalizePublicEnv(process.env.NEXT_PUBLIC_SUPABASE_URL).replace(/\/+$/, '');
+const supabaseKey = normalizePublicEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
 export const supabaseConfigured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  supabaseUrl && supabaseKey,
 );
+
+export const supabaseHost = (() => {
+  try { return new URL(supabaseUrl).host; } catch { return ''; }
+})();
 
 export function getSupabaseClient() {
   if (client !== undefined) return client;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  client = url && key
-    ? createClient(url, key, {
+  client = supabaseUrl && supabaseKey
+    ? createClient(supabaseUrl, supabaseKey, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
       })
     : null;
