@@ -20,7 +20,9 @@ describe('HealthApp interactions', () => {
 
   it('メニューボタンで設定画面を開き、戻るボタンで今日へ戻る', () => {
     render(<HealthApp />);
-    fireEvent.click(screen.getByRole('button', { name: '設定を開く' }));
+    fireEvent.click(screen.getByRole('button', { name: 'クイックメニューを開く' }));
+    expect(screen.getByRole('dialog', { name: 'クイックメニュー' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '目標とデータ設定' }));
     expect(screen.getByRole('heading', { name: '目標' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '今日へ戻る' }));
     expect(screen.getByRole('heading', { name: 'Premium' })).toBeTruthy();
@@ -33,5 +35,17 @@ describe('HealthApp interactions', () => {
     expect(screen.queryByText('チキンサラダボウル')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '全栄養素を見る' }));
     expect(screen.getByText('食物繊維', { exact: false })).toBeTruthy();
+  });
+
+  it('前日・翌日・カレンダーで表示日を変更できる', () => {
+    render(<HealthApp />);
+    const dateInput = screen.getByLabelText('表示する日付') as HTMLInputElement;
+    const initial = dateInput.value;
+    fireEvent.click(screen.getByRole('button', { name: '前日' }));
+    expect(dateInput.value).not.toBe(initial);
+    fireEvent.click(screen.getByRole('button', { name: '翌日' }));
+    expect(dateInput.value).toBe(initial);
+    fireEvent.change(dateInput, { target: { value: '2026-01-15' } });
+    expect(dateInput.value).toBe('2026-01-15');
   });
 });

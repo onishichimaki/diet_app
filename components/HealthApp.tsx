@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, Apple, ArrowLeft, CalendarDays, Download, Dumbbell, Flame, HeartPulse, Home, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Download, Dumbbell, Flame, HeartPulse, Home, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
 import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
 
 type Tab = '今日' | '記録' | 'レポート' | '目標';
-type Modal = 'meal' | 'exercise' | null;
+type Modal = 'meal' | 'exercise' | 'menu' | null;
 const tabs: Array<[Tab, typeof Home, string]> = [['今日', Home, '今日'], ['記録', Activity, 'フィットネス'], ['レポート', MoonStar, '睡眠'], ['目標', HeartPulse, '健康']];
 const fieldClass = 'mt-1 w-full rounded-xl border border-gray-200 bg-white p-3 text-base focus:border-leaf focus:ring-2 focus:ring-leaf/20';
 
@@ -33,7 +33,7 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   };
 
   return <main className="safe-bottom mx-auto min-h-screen max-w-lg overflow-hidden bg-[#f5f7fa]">
-    <Header date={selectedDate} tab={tab} onDate={setSelectedDate} onBack={() => setTab('今日')} onMenu={() => setTab('目標')} />
+    <Header date={selectedDate} tab={tab} onDate={setSelectedDate} onBack={() => setTab('今日')} onMenu={() => setModal('menu')} />
     {store.sample && <div className="mx-5 mb-4 flex items-center justify-between rounded-2xl bg-lime/20 px-4 py-3 text-sm"><span><b>サンプルデータ</b>を表示中</span><button className="font-bold text-leaf" onClick={() => setStore({ ...sampleStore, records: {}, sample: false })}>空で始める</button></div>}
     <div className="space-y-5 px-5">
       {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} onStart={() => setModal('exercise')} />}
@@ -44,15 +44,19 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
     <BottomNav tab={tab} setTab={setTab} />
     {modal === 'meal' && <EntryDialog title="食事を追加" close={() => setModal(null)} action={saveMeal}><MealFields /></EntryDialog>}
     {modal === 'exercise' && <EntryDialog title="運動を追加" close={() => setModal(null)} action={saveExercise}><ExerciseFields /></EntryDialog>}
+    {modal === 'menu' && <QuickMenu close={() => setModal(null)} openSettings={() => { setModal(null); setTab('目標'); }} openRecords={() => { setModal(null); setTab('記録'); }} />}
   </main>;
 }
 
 function Header({ date, tab, onDate, onBack, onMenu }: { date: string; tab: Tab; onDate: (date: string) => void; onBack: () => void; onMenu: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const label = new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date(`${date}T12:00:00`));
   const title = tab === '記録' ? '飲食物' : tab === '目標' ? '目標' : 'Premium';
+  const shiftDate = (amount: number) => { const value = new Date(`${date}T12:00:00`); value.setDate(value.getDate() + amount); onDate(dateKey(value)); };
+  const openCalendar = () => { const picker = inputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null; if (picker?.showPicker) picker.showPicker(); else picker?.click(); };
   return <header className="premium-header px-5 pb-5 pt-10">
-    <div className="header-main"><button onClick={onBack} aria-label="今日へ戻る" className="header-circle"><ArrowLeft /></button><h1>{title}</h1><button onClick={onMenu} aria-label="設定を開く" className="header-circle avatar"><MoreHorizontal /></button></div>
-    <div className="mt-4 flex items-center justify-between"><p className="text-sm font-semibold text-slate-500">{label}</p><label className="date-pill"><CalendarDays size={16}/><input aria-label="表示する日付" type="date" value={date} onChange={e => { if (e.target.value) onDate(e.target.value); }} /></label></div>
+    <div className="header-main"><button onClick={onBack} aria-label="今日へ戻る" className="header-circle"><ArrowLeft /></button><h1>{title}</h1><button onClick={onMenu} aria-label="クイックメニューを開く" className="header-circle avatar"><MoreHorizontal /></button></div>
+    <div className="date-navigation"><p>{label}</p><div><button onClick={() => shiftDate(-1)} aria-label="前日"><ChevronLeft /></button><button onClick={() => shiftDate(1)} aria-label="翌日"><ChevronRight /></button><button onClick={openCalendar} aria-label="カレンダーを開く"><CalendarDays /></button><input ref={inputRef} aria-label="表示する日付" type="date" value={date} onChange={e => { if (e.target.value) onDate(e.target.value); }} /></div></div>
   </header>;
 }
 
@@ -155,6 +159,10 @@ function Settings({ store, setStore }: { store: HealthStore; setStore: (store: H
   const setGoal = (key: keyof Goals, value: number) => setStore({ ...store, sample: false, goals: { ...store.goals, [key]: value } });
   const download = () => { const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `health-pocket-${dateKey()}.json`; link.click(); URL.revokeObjectURL(link.href); };
   return <><section className="card p-5"><h2 className="text-xl font-bold">わたしの目標</h2><div className="mt-4 space-y-3"><NumberField label="1日のカロリー (kcal)" value={store.goals.kcal} max={10000} set={value => setGoal('kcal', value)} /><NumberField label="目標体重 (kg)" value={store.goals.weight} max={500} set={value => setGoal('weight', value)} /><NumberField label="1日の歩数" value={store.goals.steps} max={200000} set={value => setGoal('steps', value)} /><NumberField label="睡眠時間" value={store.goals.sleep} max={24} set={value => setGoal('sleep', value)} /></div></section><section className="card p-5"><h2 className="font-bold">データ管理</h2><button onClick={download} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border p-3 font-bold"><Download size={18} />JSONをエクスポート</button><button onClick={() => { if (confirm('すべての記録をサンプルデータに戻しますか？')) setStore(sampleStore); }} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 p-3 font-bold text-red-600"><RotateCcw size={18} />データを初期化</button></section></>;
+}
+
+function QuickMenu({ close, openSettings, openRecords }: { close: () => void; openSettings: () => void; openRecords: () => void }) {
+  return <div className="fixed inset-0 z-30 flex items-start justify-center bg-black/30 px-5 pt-24" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><section role="dialog" aria-modal="true" aria-labelledby="quick-menu-title" className="quick-menu"><div><h2 id="quick-menu-title">クイックメニュー</h2><button onClick={close} aria-label="メニューを閉じる"><X /></button></div><button onClick={openRecords}><Plus />食事・運動を記録</button><button onClick={openSettings}><HeartPulse />目標とデータ設定</button></section></div>;
 }
 
 function EntryDialog({ title, close, action, children }: { title: string; close: () => void; action: (form: FormData) => void; children: React.ReactNode }) {
