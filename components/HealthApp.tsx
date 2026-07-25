@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Apple, ArrowLeft, CalendarDays, Download, Dumbbell, Flame, HeartPulse, Home, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
-import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, sampleStore, storageKey, totals } from '@/lib/health';
+import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
 
 type Tab = '今日' | '記録' | 'レポート' | '目標';
 type Modal = 'meal' | 'exercise' | null;
@@ -33,11 +33,11 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   };
 
   return <main className="safe-bottom mx-auto min-h-screen max-w-lg overflow-hidden bg-[#f5f7fa]">
-    <Header date={selectedDate} tab={tab} onDate={setSelectedDate} />
+    <Header date={selectedDate} tab={tab} onDate={setSelectedDate} onBack={() => setTab('今日')} onMenu={() => setTab('目標')} />
     {store.sample && <div className="mx-5 mb-4 flex items-center justify-between rounded-2xl bg-lime/20 px-4 py-3 text-sm"><span><b>サンプルデータ</b>を表示中</span><button className="font-bold text-leaf" onClick={() => setStore({ ...sampleStore, records: {}, sample: false })}>空で始める</button></div>}
     <div className="space-y-5 px-5">
-      {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} />}
-      {tab === '記録' && <Records day={day} updateDay={updateDay} open={setModal} />}
+      {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} onStart={() => setModal('exercise')} />}
+      {tab === '記録' && <Records day={day} store={store} date={selectedDate} updateDay={updateDay} open={setModal} />}
       {tab === 'レポート' && <Reports store={store} date={selectedDate} />}
       {tab === '目標' && <Settings store={store} setStore={setStore} />}
     </div>
@@ -47,16 +47,16 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   </main>;
 }
 
-function Header({ date, tab, onDate }: { date: string; tab: Tab; onDate: (date: string) => void }) {
+function Header({ date, tab, onDate, onBack, onMenu }: { date: string; tab: Tab; onDate: (date: string) => void; onBack: () => void; onMenu: () => void }) {
   const label = new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date(`${date}T12:00:00`));
   const title = tab === '記録' ? '飲食物' : tab === '目標' ? '目標' : 'Premium';
   return <header className="premium-header px-5 pb-5 pt-10">
-    <div className="header-main"><button aria-label="戻る" className="header-circle"><ArrowLeft /></button><h1>{title}</h1><button aria-label="その他のメニュー" className="header-circle avatar"><MoreHorizontal /></button></div>
+    <div className="header-main"><button onClick={onBack} aria-label="今日へ戻る" className="header-circle"><ArrowLeft /></button><h1>{title}</h1><button onClick={onMenu} aria-label="設定を開く" className="header-circle avatar"><MoreHorizontal /></button></div>
     <div className="mt-4 flex items-center justify-between"><p className="text-sm font-semibold text-slate-500">{label}</p><label className="date-pill"><CalendarDays size={16}/><input aria-label="表示する日付" type="date" value={date} onChange={e => { if (e.target.value) onDate(e.target.value); }} /></label></div>
   </header>;
 }
 
-function Dashboard({ day, goals, nutrients, onRecord }: { day: DayRecord; goals: Goals; nutrients: ReturnType<typeof totals>; onRecord: () => void }) {
+function Dashboard({ day, goals, nutrients, onRecord, onStart }: { day: DayRecord; goals: Goals; nutrients: ReturnType<typeof totals>; onRecord: () => void; onStart: () => void }) {
   const stepPercent = Math.min(100, day.steps / goals.steps * 100);
   const caloriePercent = Math.min(100, nutrients.kcal / goals.kcal * 100);
   const burned = day.exercises.reduce((sum, item) => sum + item.kcal, 0);
@@ -79,7 +79,7 @@ function Dashboard({ day, goals, nutrients, onRecord }: { day: DayRecord; goals:
       <DashboardTile tone="mint" icon={<Dumbbell />} label="エクササイズ" value={`${day.exercises.length}/3`} progress={day.exercises.length / 3 * 100} />
       <DashboardTile tone="mint" icon={<Ruler />} label="距離" value={`${day.distance} km`} progress={day.distance / 8 * 100} />
     </section>
-    <div className="grid grid-cols-2 gap-3"><button onClick={onRecord} className="action-button"><Plus />記録</button><button onClick={onRecord} className="action-button"><Activity />開始</button></div>
+    <div className="grid grid-cols-2 gap-3"><button onClick={onRecord} className="action-button"><Plus />記録</button><button onClick={onStart} className="action-button"><Activity />開始</button></div>
     <section className="insight-card"><div className="flex items-center gap-2 text-cyan-700"><Sparkles size={18}/><span className="text-xs font-bold">今日のインサイト</span></div><h2>{nutrients.protein}gのタンパク質摂取、今日もいい調子です</h2><p>栄養と活動のバランスが整っています。あと少し歩くと今日の歩数目標を達成できます。</p></section>
   </>;
 }
@@ -88,15 +88,18 @@ function DashboardTile({ tone, icon, label, value, note, progress }: { tone: str
   return <div className={`dashboard-tile ${tone}`}><span className="tile-icon">{icon}</span><div className="min-w-0"><p>{label}</p><strong>{value}</strong>{note && <small>{note}</small>}</div>{progress !== undefined && <i style={{ width: `${Math.min(100, progress)}%` }} />}</div>;
 }
 
-function Records({ day, updateDay, open }: { day: DayRecord; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void }) {
-  const [period, setPeriod] = useState('日');
+function Records({ day, store, date, updateDay, open }: { day: DayRecord; store: HealthStore; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void }) {
+  const [period, setPeriod] = useState<ReportPeriod>('日');
+  const [showAllNutrients, setShowAllNutrients] = useState(false);
   const [mealFilter, setMealFilter] = useState<MealType | 'すべて'>('すべて');
-  const nutrients = totals(day.meals);
+  const days = periodRecords(store, date, period);
+  const periodTotals = totals(days.flatMap(record => record.meals));
+  const nutrients = { kcal: Math.round(periodTotals.kcal / days.length), protein: Math.round(periodTotals.protein / days.length), fat: Math.round(periodTotals.fat / days.length), carbs: Math.round(periodTotals.carbs / days.length) };
   const visibleMeals = mealFilter === 'すべて' ? day.meals : day.meals.filter(meal => meal.type === mealFilter);
   return <>
     <div className="record-toolbar"><div><p>今日</p><h2>飲食物</h2></div><button onClick={() => open('meal')} aria-label="食事を追加"><Plus /></button></div>
-    <div className="record-period">{['日', '週', '月', '3か月', '年'].map(value => <button key={value} onClick={() => setPeriod(value)} className={period === value ? 'active' : ''}>{value}</button>)}</div>
-    <section className="nutrition-panel"><div className="flex items-center justify-between"><h2>主要栄養素の目標</h2><span>全栄養素を見る</span></div><p className="nutrition-copy">炭水化物、たんぱく質、脂質のバランスを保つことは、体力や気力の維持と回復に重要です。</p><NutrientProgress label="炭水化物" value={nutrients.carbs} goal={207} color="#05617a" /><NutrientProgress label="脂質" value={nutrients.fat} goal={50} color="#a1262c" /><NutrientProgress label="たんぱく質" value={nutrients.protein} goal={108} color="#8a5b00" /></section>
+    <div className="record-period">{['日', '週', '月', '3か月', '年'].map(value => <button key={value} onClick={() => setPeriod(value as ReportPeriod)} className={period === value ? 'active' : ''}>{value}</button>)}</div>
+    <section className="nutrition-panel"><div className="flex items-center justify-between"><h2>主要栄養素の目標</h2><button onClick={() => setShowAllNutrients(value => !value)}>{showAllNutrients ? '閉じる' : '全栄養素を見る'}</button></div><p className="nutrition-copy">炭水化物、たんぱく質、脂質のバランスを保つことは、体力や気力の維持と回復に重要です。</p><NutrientProgress label="炭水化物" value={nutrients.carbs} goal={207} color="#05617a" /><NutrientProgress label="脂質" value={nutrients.fat} goal={50} color="#a1262c" /><NutrientProgress label="たんぱく質" value={nutrients.protein} goal={108} color="#8a5b00" />{showAllNutrients && <div className="all-nutrients"><span>摂取カロリー <b>{nutrients.kcal.toLocaleString()} kcal</b></span><span>食物繊維 <b>{Math.round(nutrients.carbs * .08)} g</b></span><span>糖質 <b>{Math.round(nutrients.carbs * .72)} g</b></span></div>}</section>
     <div className="meal-filters"><button onClick={() => setMealFilter('すべて')} className={mealFilter === 'すべて' ? 'active' : ''}>✓ すべて</button>{MEAL_TYPES.map(type => <button onClick={() => setMealFilter(type)} className={mealFilter === type ? 'active' : ''} key={type}>{type}</button>)}</div>
     <MealList meals={visibleMeals} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
     <button onClick={() => open('exercise')} className="action-button dark"><Activity size={19} />運動を追加</button>
@@ -122,14 +125,14 @@ function MealList({ meals, remove }: { meals: Meal[]; remove?: (id: string) => v
 }
 
 function Reports({ store, date }: { store: HealthStore; date: string }) {
-  const [period, setPeriod] = useState<'日' | '週' | '月'>('週');
+  const [period, setPeriod] = useState<ReportPeriod>('週');
   const records = periodRecords(store, date, period);
   const calories = records.map(day => totals(day.meals).kcal);
   const values = {
     carbs: records.map(day => totals(day.meals).carbs), protein: records.map(day => totals(day.meals).protein), fat: records.map(day => totals(day.meals).fat), calories,
     burned: records.map(day => day.exercises.reduce((sum, item) => sum + item.kcal, 0)), exercise: records.map(day => day.exercises.length), steps: records.map(day => day.steps), distance: records.map(day => day.distance),
   };
-  return <><div className="period-tabs">{(['日', '週', '月'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={period === value ? 'active' : ''}>{value}</button>)}</div><div className="report-grid">
+  return <><div className="period-tabs">{(['日', '週', '月'] as const).map(value => <button key={value} onClick={() => setPeriod(value as ReportPeriod)} className={period === value ? 'active' : ''}>{value}</button>)}</div><div className="report-grid">
     <TrendCard title="炭水化物" value={`${Math.round(average(values.carbs))} g`} values={values.carbs} status="範囲内" />
     <TrendCard title="たんぱく質" value={`${Math.round(average(values.protein))} g`} values={values.protein} status="目標まで少し" />
     <TrendCard title="脂質" value={`${Math.round(average(values.fat))} g`} values={values.fat} status="範囲内" />

@@ -14,7 +14,7 @@ describe('health domain', () => {
 });
 
 describe('periodRecords', () => {
-  it.each([['日', 1], ['週', 7], ['月', 30]] as const)('%sレポート用の日数を返す', (period, length) => {
+  it.each([['日', 1], ['週', 7], ['月', 30], ['3か月', 90], ['年', 365]] as const)('%sレポート用の日数を返す', (period, length) => {
     expect(periodRecords(sampleStore, dateKey(), period)).toHaveLength(length);
   });
   it('記録がない日を空データで補完する', () => {
