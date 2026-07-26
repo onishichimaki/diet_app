@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Cloud, Download, Dumbbell, Flame, HeartPulse, Home, LogOut, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
+import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Cloud, Download, Dumbbell, Flame, HeartPulse, Home, LogOut, MoonStar, MoreHorizontal, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
 import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
 import { CloudState, useCloudSync } from '@/lib/useCloudSync';
 import type { NutritionEstimate } from '@/lib/gemini';
@@ -17,6 +17,7 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   const [store, setStore] = useState<HealthStore>(sampleStore);
   const [loaded, setLoaded] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const cloud = useCloudSync(store, setStore, loaded);
 
   useEffect(() => { queueMicrotask(() => { setStore(loadHealthStore(localStorage.getItem(storageKey))); setLoaded(true); }); }, []);
@@ -26,9 +27,19 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   const updateDay = (next: DayRecord) => setStore(current => ({ ...current, sample: false, records: { ...current.records, [selectedDate]: next } }));
   const nutrients = useMemo(() => totals(day.meals), [day.meals]);
 
-  const saveMeal = (form: FormData) => {
-    const meal: Meal = { id: crypto.randomUUID(), type: form.get('type') as MealType, name: String(form.get('name')).trim(), kcal: Number(form.get('kcal')), protein: Number(form.get('protein')), fat: Number(form.get('fat')), carbs: Number(form.get('carbs')) };
-    updateDay({ ...day, meals: [...day.meals, meal] }); setModal(null);
+  const saveMeal = (form: FormData, target?: Meal) => {
+    const mealId = target?.id ?? String(form.get('mealId') ?? '');
+    const originalName = target?.name ?? String(form.get('originalName') ?? '');
+    const originalType = target?.type ?? String(form.get('originalType') ?? '');
+    const meal: Meal = { id: mealId || crypto.randomUUID(), type: form.get('type') as MealType, name: String(form.get('name')).trim(), kcal: Number(form.get('kcal')), protein: Number(form.get('protein')), fat: Number(form.get('fat')), carbs: Number(form.get('carbs')) };
+    setStore(current => {
+      const currentDay = current.records[selectedDate] ?? emptyDay(selectedDate);
+      const matchesTarget = (item: Meal) => item.id === meal.id || Boolean(originalName && item.name === originalName && item.type === originalType);
+      const exists = currentDay.meals.some(matchesTarget);
+      const meals = exists ? currentDay.meals.map(item => matchesTarget(item) ? { ...meal, id: item.id } : item) : [...currentDay.meals, meal];
+      return { ...current, sample: false, records: { ...current.records, [selectedDate]: { ...currentDay, meals } } };
+    });
+    setEditingMeal(null); setModal(null);
   };
   const saveExercise = (form: FormData) => {
     const exercise: Exercise = { id: crypto.randomUUID(), name: String(form.get('name')).trim(), minutes: Number(form.get('minutes')), kcal: Number(form.get('kcal')) };
@@ -40,12 +51,12 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
     {store.sample && <div className="mx-5 mb-4 flex items-center justify-between rounded-2xl bg-lime/20 px-4 py-3 text-sm"><span><b>サンプルデータ</b>を表示中</span><button className="font-bold text-leaf" onClick={() => setStore({ ...sampleStore, records: {}, sample: false })}>空で始める</button></div>}
     <div className="space-y-5 px-5">
       {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} onStart={() => setModal('exercise')} />}
-      {tab === '記録' && <Records day={day} store={store} date={selectedDate} updateDay={updateDay} open={setModal} />}
+      {tab === '記録' && <Records day={day} store={store} date={selectedDate} updateDay={updateDay} open={modal => { if (modal === 'meal') setEditingMeal(null); setModal(modal); }} editMeal={meal => { setEditingMeal(meal); setModal('meal'); }} />}
       {tab === 'レポート' && <Reports store={store} date={selectedDate} />}
       {tab === '目標' && <Settings store={store} setStore={setStore} cloud={cloud} />}
     </div>
     <BottomNav tab={tab} setTab={setTab} />
-    {modal === 'meal' && <EntryDialog title="食事を追加" close={() => setModal(null)} action={saveMeal}><MealFields /></EntryDialog>}
+    {modal === 'meal' && <EntryDialog key={editingMeal?.id ?? 'new-meal'} title={editingMeal ? '食事を編集' : '食事を追加'} close={() => { setEditingMeal(null); setModal(null); }} action={form => saveMeal(form, editingMeal ?? undefined)}><MealFields initialMeal={editingMeal} /></EntryDialog>}
     {modal === 'exercise' && <EntryDialog title="運動を追加" close={() => setModal(null)} action={saveExercise}><ExerciseFields /></EntryDialog>}
     {modal === 'menu' && <QuickMenu close={() => setModal(null)} openSettings={() => { setModal(null); setTab('目標'); }} openRecords={() => { setModal(null); setTab('記録'); }} />}
   </main>;
@@ -95,7 +106,7 @@ function DashboardTile({ tone, icon, label, value, note, progress }: { tone: str
   return <div className={`dashboard-tile ${tone}`}><span className="tile-icon">{icon}</span><div className="min-w-0"><p>{label}</p><strong>{value}</strong>{note && <small>{note}</small>}</div>{progress !== undefined && <i style={{ width: `${Math.min(100, progress)}%` }} />}</div>;
 }
 
-function Records({ day, store, date, updateDay, open }: { day: DayRecord; store: HealthStore; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void }) {
+function Records({ day, store, date, updateDay, open, editMeal }: { day: DayRecord; store: HealthStore; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void; editMeal: (meal: Meal) => void }) {
   const [period, setPeriod] = useState<ReportPeriod>('日');
   const [showAllNutrients, setShowAllNutrients] = useState(false);
   const [mealFilter, setMealFilter] = useState<MealType | 'すべて'>('すべて');
@@ -108,7 +119,7 @@ function Records({ day, store, date, updateDay, open }: { day: DayRecord; store:
     <div className="record-period">{['日', '週', '月', '3か月', '年'].map(value => <button key={value} onClick={() => setPeriod(value as ReportPeriod)} className={period === value ? 'active' : ''}>{value}</button>)}</div>
     <section className="nutrition-panel"><div className="flex items-center justify-between"><h2>主要栄養素の目標</h2><button onClick={() => setShowAllNutrients(value => !value)}>{showAllNutrients ? '閉じる' : '全栄養素を見る'}</button></div><p className="nutrition-copy">炭水化物、たんぱく質、脂質のバランスを保つことは、体力や気力の維持と回復に重要です。</p><NutrientProgress label="炭水化物" value={nutrients.carbs} goal={207} color="#05617a" /><NutrientProgress label="脂質" value={nutrients.fat} goal={50} color="#a1262c" /><NutrientProgress label="たんぱく質" value={nutrients.protein} goal={108} color="#8a5b00" />{showAllNutrients && <div className="all-nutrients"><span>摂取カロリー <b>{nutrients.kcal.toLocaleString()} kcal</b></span><span>食物繊維 <b>{Math.round(nutrients.carbs * .08)} g</b></span><span>糖質 <b>{Math.round(nutrients.carbs * .72)} g</b></span></div>}</section>
     <div className="meal-filters"><button onClick={() => setMealFilter('すべて')} className={mealFilter === 'すべて' ? 'active' : ''}>✓ すべて</button>{MEAL_TYPES.map(type => <button onClick={() => setMealFilter(type)} className={mealFilter === type ? 'active' : ''} key={type}>{type}</button>)}</div>
-    <MealList meals={visibleMeals} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
+    <MealList meals={visibleMeals} edit={editMeal} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
     <button onClick={() => open('exercise')} className="action-button dark"><Activity size={19} />運動を追加</button>
     <section className="card p-5"><h2 className="font-bold">運動記録</h2>{day.exercises.length === 0 ? <Empty /> : day.exercises.map(item => <div className="mt-3 flex items-center justify-between border-t pt-3" key={item.id}><div><b>{item.name}</b><p className="text-sm text-gray-500">{item.minutes}分・{item.kcal} kcal</p></div><DeleteButton label={`${item.name}を削除`} onClick={() => updateDay({ ...day, exercises: day.exercises.filter(exercise => exercise.id !== item.id) })} /></div>)}</section>
     <section className="card p-5"><h2 className="font-bold">測定値</h2><div className="mt-4 grid grid-cols-2 gap-3"><NumberField label="体重 (kg)" value={day.weight ?? ''} max={500} set={value => updateDay({ ...day, weight: value || null })} /><NumberField label="歩数" value={day.steps} max={200000} set={value => updateDay({ ...day, steps: value })} /><NumberField label="距離 (km)" value={day.distance} max={1000} set={value => updateDay({ ...day, distance: value })} /><NumberField label="睡眠 (時間)" value={day.sleep ?? ''} max={24} set={value => updateDay({ ...day, sleep: value || null })} /></div></section>
@@ -120,13 +131,13 @@ function NutrientProgress({ label, value, goal, color }: { label: string; value:
   return <div className="nutrient-progress"><div><b>{label} · {Math.round(percent)}% · {value}/{goal} g</b><span className={status === '範囲内' ? 'good' : ''}>{status}</span></div><div className="track"><i style={{ width: `${Math.min(100, percent)}%`, background: color }} /><em style={{ left: `${Math.min(92, 100)}%` }} /></div></div>;
 }
 
-function MealList({ meals, remove }: { meals: Meal[]; remove?: (id: string) => void }) {
+function MealList({ meals, remove, edit }: { meals: Meal[]; remove?: (id: string) => void; edit?: (meal: Meal) => void }) {
   return <section className="meal-list">{MEAL_TYPES.map(type => {
     const list = meals.filter(meal => meal.type === type);
     const kcal = list.reduce((sum, item) => sum + item.kcal, 0);
     return <details key={type} open={list.length > 0}>
       <summary><div><b>{type}</b><span>{list.length}個のアイテム</span></div><strong>{kcal.toLocaleString()} kcal</strong></summary>
-      {list.length === 0 ? <Empty /> : list.map(meal => <div className="meal-row" key={meal.id}><div><p>{meal.name}</p><small>P {meal.protein} · F {meal.fat} · C {meal.carbs}</small></div>{remove && <DeleteButton label={`${meal.name}を削除`} onClick={() => remove(meal.id)} />}</div>)}
+      {list.length === 0 ? <Empty /> : list.map(meal => <div className="meal-row" key={meal.id}><div><p>{meal.name}</p><small>P {meal.protein} · F {meal.fat} · C {meal.carbs}</small></div><div className="flex items-center">{edit && <button type="button" aria-label={`${meal.name}を編集`} onClick={() => edit(meal)} className="rounded-full p-2 text-cyan-700"><Pencil size={17}/></button>}{remove && <DeleteButton label={`${meal.name}を削除`} onClick={() => remove(meal.id)} />}</div></div>)}
     </details>;
   })}</section>;
 }
@@ -174,13 +185,13 @@ function QuickMenu({ close, openSettings, openRecords }: { close: () => void; op
 }
 
 function EntryDialog({ title, close, action, children }: { title: string; close: () => void; action: (form: FormData) => void; children: React.ReactNode }) {
-  return <div className="fixed inset-0 z-30 flex items-end bg-black/40" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><div role="dialog" aria-modal="true" aria-labelledby="dialog-title" className="mx-auto w-full max-w-lg rounded-t-3xl bg-white p-6"><div className="flex items-center justify-between"><h2 id="dialog-title" className="text-xl font-bold">{title}</h2><button aria-label="閉じる" onClick={close} className="rounded-full p-2"><X /></button></div><form action={action} className="mt-4 space-y-3">{children}<div className="flex gap-2 pt-2"><button type="button" onClick={close} className="flex-1 rounded-xl border p-3">キャンセル</button><button className="flex-1 rounded-xl bg-leaf p-3 font-bold text-white">保存</button></div></form></div></div>;
+  return <div className="fixed inset-0 z-30 flex items-end bg-black/40" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><div role="dialog" aria-modal="true" aria-labelledby="dialog-title" className="mx-auto w-full max-w-lg rounded-t-3xl bg-white p-6"><div className="flex items-center justify-between"><h2 id="dialog-title" className="text-xl font-bold">{title}</h2><button aria-label="閉じる" onClick={close} className="rounded-full p-2"><X /></button></div><form onSubmit={event => { event.preventDefault(); action(new FormData(event.currentTarget)); }} className="mt-4 space-y-3">{children}<div className="flex gap-2 pt-2"><button type="button" onClick={close} className="flex-1 rounded-xl border p-3">キャンセル</button><button className="flex-1 rounded-xl bg-leaf p-3 font-bold text-white">保存</button></div></form></div></div>;
 }
-function MealFields() {
-  const [name, setName] = useState('');
+function MealFields({ initialMeal }: { initialMeal?: Meal | null }) {
+  const [name, setName] = useState(initialMeal?.name ?? '');
   const [ingredients, setIngredients] = useState('');
   const [servings, setServings] = useState('1');
-  const [values, setValues] = useState({ kcal: '', protein: '', fat: '', carbs: '' });
+  const [values, setValues] = useState({ kcal: initialMeal ? String(initialMeal.kcal) : '', protein: initialMeal ? String(initialMeal.protein) : '', fat: initialMeal ? String(initialMeal.fat) : '', carbs: initialMeal ? String(initialMeal.carbs) : '' });
   const [aiState, setAiState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [aiMessage, setAiMessage] = useState('');
 
@@ -201,7 +212,8 @@ function MealFields() {
   };
 
   return <>
-    <label className="block text-sm font-semibold">食事区分<select name="type" className={fieldClass}>{MEAL_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
+    {initialMeal && <><input type="hidden" name="mealId" value={initialMeal.id} /><input type="hidden" name="originalName" value={initialMeal.name} /><input type="hidden" name="originalType" value={initialMeal.type} /></>}
+    <label className="block text-sm font-semibold">食事区分<select name="type" defaultValue={initialMeal?.type ?? '朝食'} className={fieldClass}>{MEAL_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
     <label className="block text-sm font-semibold">料理名<input autoFocus required maxLength={80} name="name" value={name} onChange={event => setName(event.target.value)} className={fieldClass} placeholder="例：鮭と玄米のプレート" /></label>
     <label className="block text-sm font-semibold">材料・分量（AI補完用）<textarea maxLength={2000} value={ingredients} onChange={event => setIngredients(event.target.value)} className={`${fieldClass} min-h-24 resize-y`} placeholder={'例：鮭100g\n玄米150g\nブロッコリー80g'} /></label>
     <label className="block text-sm font-semibold">レシピの人数<input min="0.1" max="100" step="0.1" type="number" value={servings} onChange={event => setServings(event.target.value)} className={fieldClass} /></label>

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HealthApp from './HealthApp';
 
@@ -69,5 +69,20 @@ describe('HealthApp interactions', () => {
     expect(await screen.findByDisplayValue('620')).toBeTruthy();
     expect(screen.getByDisplayValue('28')).toBeTruthy();
     expect(screen.getByText('推定精度: 中。一般的な1人分です。 数値を確認してから保存してください。')).toBeTruthy();
+  });
+
+  it('登録済みの食事を編集して保存できる', async () => {
+    render(<HealthApp initialTab="記録" />);
+    await waitFor(() => expect(localStorage.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'ヨーグルトとベリーを編集' }));
+    expect(screen.getByRole('dialog', { name: '食事を編集' })).toBeTruthy();
+    expect((document.querySelector('input[name="mealId"]') as HTMLInputElement).value).toContain('-b');
+    const name = screen.getByLabelText('料理名') as HTMLInputElement;
+    expect(name.value).toBe('ヨーグルトとベリー');
+    fireEvent.change(name, { target: { value: 'ヨーグルトとバナナ' } });
+    fireEvent.change(screen.getByLabelText('カロリー'), { target: { value: '320' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await screen.findByText('ヨーグルトとバナナ')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('ヨーグルトとベリー')).toBeNull());
   });
 });
