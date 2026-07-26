@@ -116,7 +116,7 @@ export function useCloudSync(
       setStatus('エラー');
       setMessage(error.message === 'Failed to fetch'
         ? `クラウド中継へ接続できません。ページを再読み込みして再試行してください（接続先: ${supabaseHost || '不明'}）。`
-        : `ログインメールを送信できませんでした: ${error.message}`);
+        : `ログインメールを送信できませんでした: ${error.message === '{}' ? 'Supabaseの公開キーまたは認証設定を確認してください。' : error.message}`);
     } else {
       setStatus('未ログイン');
       setMessage('ログイン用リンクをメールで送りました');

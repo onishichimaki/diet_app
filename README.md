@@ -72,6 +72,8 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 ブラウザとSupabase間のネットワーク制限やCORSの影響を避けるため、Supabase SDKの通信は同一オリジンの`/api/supabase/*`から固定されたProject URLへ中継します。中継先は環境変数のSupabase URL以外に変更できず、Service WorkerもAPI通信には介入しません。
 
+中継APIはSupabase SDKのバージョンヘッダーを含むリクエスト・レスポンスヘッダーを保持し、ホップ単位のヘッダー、Cookie、Originだけを除外します。これによりOTP認証レスポンスをSDKが本来の形式で解釈できます。
+
 ## 技術構成
 
 Next.js App Router / React / TypeScript / Tailwind CSS / Vitest。詳しくは[設計資料](docs/DESIGN.md)を参照してください。
