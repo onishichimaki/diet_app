@@ -74,6 +74,8 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 中継APIはSupabase SDKのバージョンヘッダーを含むリクエスト・レスポンスヘッダーを保持し、ホップ単位のヘッダー、Cookie、Originだけを除外します。これによりOTP認証レスポンスをSDKが本来の形式で解釈できます。
 
+`/api/cloud-diagnostics`は秘密値を返さず、設定されたキーの種類・長さとSupabase Authへの疎通結果だけを返す。`work`へのpush後はGitHub ActionsがVercelのデプロイを待ち、この診断APIでProductionのクラウド設定を自動検証する。
+
 ## 技術構成
 
 Next.js App Router / React / TypeScript / Tailwind CSS / Vitest。詳しくは[設計資料](docs/DESIGN.md)を参照してください。

@@ -1,0 +1,19 @@
+name: Production cloud smoke test
+
+on:
+  push:
+    branches: [work]
+  workflow_dispatch:
+
+jobs:
+  verify-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Vercel production deployment
+        run: sleep 90
+      - name: Verify Supabase configuration through production
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --retry 5 --retry-delay 15 --max-time 30 https://diet-app-chimaki.vercel.app/api/cloud-diagnostics)"
+          echo "$response"
+          echo "$response" | jq -e '.ok == true and .upstreamStatus == 200'
