@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractGeminiJson, parseNutritionEstimate, validateNutritionRequest } from './gemini';
+import { extractGeminiJson, parseNutritionEstimate, selectGeminiModel, validateNutritionRequest } from './gemini';
 
 describe('Gemini nutrition helpers', () => {
   it('栄養推定リクエストを検証する', () => {
@@ -17,5 +17,15 @@ describe('Gemini nutrition helpers', () => {
   it('異常値や壊れた回答を拒否する', () => {
     expect(extractGeminiJson({ candidates: [{ content: { parts: [{ text: 'not json' }] } }] })).toBeNull();
     expect(parseNutritionEstimate({ name: '料理', kcal: -1, protein: 1, fat: 1, carbs: 1, confidence: '高', note: '' })).toBeNull();
+  });
+
+  it('利用可能モデルからGemini 3 Flashを選択する', () => {
+    const payload = { models: [
+      { name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-3-flash-preview', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] },
+    ] };
+    expect(selectGeminiModel(payload, 'gemini-2.5-flash')).toBe('gemini-2.5-flash');
+    expect(selectGeminiModel(payload, 'missing-model')).toBe('gemini-3-flash-preview');
   });
 });

@@ -75,7 +75,7 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 ## Geminiで栄養情報を補完する
 
-Google AI Studioで作成したAPIキーを、Vercelのサーバー専用環境変数`GEMINI_API_KEY`へ登録してRedeployします。`NEXT_PUBLIC_`は付けません。モデルは`GEMINI_MODEL`で変更でき、未設定時は`gemini-2.5-flash`を使用します。
+Google AI Studioで作成したAPIキーを、Vercelのサーバー専用環境変数`GEMINI_API_KEY`へ登録してRedeployします。`NEXT_PUBLIC_`は付けません。モデルは`GEMINI_MODEL`で変更でき、未設定時は`gemini-3-flash-preview`を優先します。APIのモデル一覧を実行時に取得し、指定モデルが利用できない場合は利用可能な最新のFlash系モデルへ自動フォールバックします。旧設定`gemini-2.5-flash`も自動的に新しい既定モデルへ移行します。
 
 食事追加ダイアログで料理名、材料・分量、レシピの人数を入力し、「AIで栄養情報を補完」を押すと、1人分のカロリー・たんぱく質・脂質・炭水化物を推定して入力欄へ反映します。AIの値は推定であり、保存前にユーザーが確認・編集します。APIキーはNext.js Route Handler内だけで読み込み、ブラウザへ返しません。入力長、数値範囲、出力JSON、タイムアウト、1分あたりの呼び出し回数を検証します。
 

@@ -1,4 +1,4 @@
-import { extractGeminiJson, parseNutritionEstimate, validateNutritionRequest } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL, extractGeminiJson, parseNutritionEstimate, selectGeminiModel, validateNutritionRequest } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 10;
+let modelCache: { name: string; expiresAt: number } | null = null;
 
 function allowRequest(ip: string) {
   const now = Date.now();
@@ -17,6 +18,23 @@ function allowRequest(ip: string) {
   if (current.count >= MAX_REQUESTS) return false;
   current.count += 1;
   return true;
+}
+
+async function resolveModel(apiBaseUrl: string, apiKey: string) {
+  if (modelCache && modelCache.expiresAt > Date.now()) return modelCache.name;
+  const configured = process.env.GEMINI_MODEL?.trim();
+  const preferred = !configured || configured === 'gemini-2.5-flash' || configured === 'models/gemini-2.5-flash'
+    ? DEFAULT_GEMINI_MODEL
+    : configured;
+  try {
+    const response = await fetch(`${apiBaseUrl}/models?pageSize=1000`, { headers: { 'x-goog-api-key': apiKey }, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    const payload: unknown = await response.json();
+    const name = response.ok ? selectGeminiModel(payload, preferred) : preferred;
+    modelCache = { name, expiresAt: Date.now() + 60 * 60_000 };
+    return name;
+  } catch {
+    return preferred;
+  }
 }
 
 export async function GET() {
@@ -35,8 +53,8 @@ export async function POST(request: Request) {
   const input = validateNutritionRequest(body);
   if (!input) return Response.json({ error: '料理名または材料、人数を確認してください。' }, { status: 400 });
 
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
   const apiBaseUrl = (process.env.GEMINI_API_BASE_URL?.trim() || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
+  const model = await resolveModel(apiBaseUrl, apiKey);
   const prompt = `あなたは管理栄養士を補助する栄養計算システムです。以下の料理について、レシピ全体ではなく1人分の推定値を返してください。曖昧な場合は一般的な日本の家庭料理の量を仮定し、医療的助言はしないでください。\n料理名: ${input.name || '未入力'}\n材料・分量: ${input.ingredients || '詳細なし'}\nレシピの人数: ${input.servings}人分`;
 
   try {

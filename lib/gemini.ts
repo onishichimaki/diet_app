@@ -14,6 +14,27 @@ export type NutritionRequest = {
   servings: number;
 };
 
+export const DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview';
+
+type GeminiModelList = { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> };
+
+export const normalizeGeminiModel = (name: string) => name.trim().replace(/^models\//, '');
+
+export function selectGeminiModel(payload: unknown, preferred = DEFAULT_GEMINI_MODEL) {
+  const models = payload && typeof payload === 'object' ? (payload as GeminiModelList).models : undefined;
+  const available = (models ?? [])
+    .filter(model => model.supportedGenerationMethods?.includes('generateContent'))
+    .map(model => normalizeGeminiModel(model.name ?? ''))
+    .filter(name => name.startsWith('gemini-') && !/(image|vision|tts|embedding)/i.test(name));
+  const normalizedPreferred = normalizeGeminiModel(preferred);
+  if (available.includes(normalizedPreferred)) return normalizedPreferred;
+  const priorities = ['gemini-3-flash-preview', 'gemini-3-flash'];
+  for (const name of priorities) if (available.includes(name)) return name;
+  return available.filter(name => /flash/i.test(name)).sort().reverse()[0]
+    ?? available.sort().reverse()[0]
+    ?? normalizedPreferred;
+}
+
 const finiteInRange = (value: unknown, max: number): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max;
 
