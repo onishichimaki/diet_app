@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HealthApp from './HealthApp';
 
 beforeEach(() => localStorage.clear());
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('HealthApp interactions', () => {
   it('記録ボタンから飲食物画面へ移動する', () => {
@@ -54,5 +54,20 @@ describe('HealthApp interactions', () => {
     expect(screen.getByRole('heading', { name: 'クラウド同期' })).toBeTruthy();
     expect(screen.getByText('Supabaseの接続設定が必要です。')).toBeTruthy();
     expect(screen.getByText('未設定')).toBeTruthy();
+  });
+
+  it('Geminiの推定値を食事フォームへ反映する', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ estimate: { name: '親子丼', kcal: 620, protein: 28, fat: 18, carbs: 82, confidence: '中', note: '一般的な1人分です。' } }),
+    }));
+    render(<HealthApp initialTab="記録" />);
+    fireEvent.click(screen.getByRole('button', { name: '食事を追加' }));
+    fireEvent.change(screen.getByLabelText('料理名'), { target: { value: '親子丼' } });
+    fireEvent.change(screen.getByLabelText('材料・分量（AI補完用）'), { target: { value: '鶏肉100g、卵1個、ご飯200g' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AIで栄養情報を補完' }));
+    expect(await screen.findByDisplayValue('620')).toBeTruthy();
+    expect(screen.getByDisplayValue('28')).toBeTruthy();
+    expect(screen.getByText('推定精度: 中。一般的な1人分です。 数値を確認してから保存してください。')).toBeTruthy();
   });
 });

@@ -12,6 +12,7 @@
 - 35日分のサンプル履歴、空データ開始、初期化、JSONエクスポート
 - Local Storageのスキーマ検証と、Service Workerによるオフライン動作
 - Supabase Authのメールリンクログインと、ユーザー単位のクラウド同期
+- Geminiによる料理名・材料・人数からの1人分カロリー/PFC推定とフォーム自動補完
 - インストール可能なManifestとマスカブルアイコン
 
 ## ローカルで起動する
@@ -71,6 +72,12 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 この配備先専用の保護策として、Project URLが未設定または`xxxxxxxxxxxx.supabase.co`という説明用プレースホルダーのままの場合は、Health Pocket用の公開Project URLへ補正する。Project URLは公開識別子であり秘密鍵ではない。Publishable Keyは引き続きVercel環境変数から取得する。
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
+
+## Geminiで栄養情報を補完する
+
+Google AI Studioで作成したAPIキーを、Vercelのサーバー専用環境変数`GEMINI_API_KEY`へ登録してRedeployします。`NEXT_PUBLIC_`は付けません。モデルは`GEMINI_MODEL`で変更でき、未設定時は`gemini-2.5-flash`を使用します。
+
+食事追加ダイアログで料理名、材料・分量、レシピの人数を入力し、「AIで栄養情報を補完」を押すと、1人分のカロリー・たんぱく質・脂質・炭水化物を推定して入力欄へ反映します。AIの値は推定であり、保存前にユーザーが確認・編集します。APIキーはNext.js Route Handler内だけで読み込み、ブラウザへ返しません。入力長、数値範囲、出力JSON、タイムアウト、1分あたりの呼び出し回数を検証します。
 
 Supabase SDKはProject URLへ直接接続する。Service Workerは外部オリジンと`/api/*`の通信には介入しない。VercelではSupabaseの現行UIから取得したProject URLとPublishable KeyをProduction環境へ設定する。
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Cloud, Download, Dumbbell, Flame, HeartPulse, Home, LogOut, MoonStar, MoreHorizontal, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
 import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
 import { CloudState, useCloudSync } from '@/lib/useCloudSync';
+import type { NutritionEstimate } from '@/lib/gemini';
 
 type Tab = '今日' | '記録' | 'レポート' | '目標';
 type Modal = 'meal' | 'exercise' | 'menu' | null;
@@ -175,7 +176,41 @@ function QuickMenu({ close, openSettings, openRecords }: { close: () => void; op
 function EntryDialog({ title, close, action, children }: { title: string; close: () => void; action: (form: FormData) => void; children: React.ReactNode }) {
   return <div className="fixed inset-0 z-30 flex items-end bg-black/40" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}><div role="dialog" aria-modal="true" aria-labelledby="dialog-title" className="mx-auto w-full max-w-lg rounded-t-3xl bg-white p-6"><div className="flex items-center justify-between"><h2 id="dialog-title" className="text-xl font-bold">{title}</h2><button aria-label="閉じる" onClick={close} className="rounded-full p-2"><X /></button></div><form action={action} className="mt-4 space-y-3">{children}<div className="flex gap-2 pt-2"><button type="button" onClick={close} className="flex-1 rounded-xl border p-3">キャンセル</button><button className="flex-1 rounded-xl bg-leaf p-3 font-bold text-white">保存</button></div></form></div></div>;
 }
-const MealFields = () => <><label className="block text-sm font-semibold">食事区分<select name="type" className={fieldClass}>{MEAL_TYPES.map(type => <option key={type}>{type}</option>)}</select></label><label className="block text-sm font-semibold">料理名<input autoFocus required maxLength={80} name="name" className={fieldClass} /></label><div className="grid grid-cols-2 gap-2">{([['kcal', 'カロリー'], ['protein', 'たんぱく質 (g)'], ['fat', '脂質 (g)'], ['carbs', '炭水化物 (g)']] as const).map(([name, label]) => <label key={name} className="text-sm font-semibold">{label}<input required min="0" max="20000" step="0.1" type="number" name={name} className={fieldClass} /></label>)}</div></>;
+function MealFields() {
+  const [name, setName] = useState('');
+  const [ingredients, setIngredients] = useState('');
+  const [servings, setServings] = useState('1');
+  const [values, setValues] = useState({ kcal: '', protein: '', fat: '', carbs: '' });
+  const [aiState, setAiState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [aiMessage, setAiMessage] = useState('');
+
+  const estimate = async () => {
+    if (!name.trim() && !ingredients.trim()) { setAiState('error'); setAiMessage('料理名または材料を入力してください。'); return; }
+    setAiState('loading'); setAiMessage('');
+    try {
+      const response = await fetch('/api/ai/nutrition', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, ingredients, servings: Number(servings) }) });
+      const payload = await response.json() as { estimate?: NutritionEstimate; error?: string };
+      if (!response.ok || !payload.estimate) throw new Error(payload.error || '栄養情報を取得できませんでした。');
+      const result = payload.estimate;
+      setName(current => current.trim() || result.name);
+      setValues({ kcal: String(result.kcal), protein: String(result.protein), fat: String(result.fat), carbs: String(result.carbs) });
+      setAiState('success'); setAiMessage(`推定精度: ${result.confidence}。${result.note} 数値を確認してから保存してください。`);
+    } catch (error) {
+      setAiState('error'); setAiMessage(error instanceof Error ? error.message : 'AI補完に失敗しました。');
+    }
+  };
+
+  return <>
+    <label className="block text-sm font-semibold">食事区分<select name="type" className={fieldClass}>{MEAL_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
+    <label className="block text-sm font-semibold">料理名<input autoFocus required maxLength={80} name="name" value={name} onChange={event => setName(event.target.value)} className={fieldClass} placeholder="例：鮭と玄米のプレート" /></label>
+    <label className="block text-sm font-semibold">材料・分量（AI補完用）<textarea maxLength={2000} value={ingredients} onChange={event => setIngredients(event.target.value)} className={`${fieldClass} min-h-24 resize-y`} placeholder={'例：鮭100g\n玄米150g\nブロッコリー80g'} /></label>
+    <label className="block text-sm font-semibold">レシピの人数<input min="0.1" max="100" step="0.1" type="number" value={servings} onChange={event => setServings(event.target.value)} className={fieldClass} /></label>
+    <button type="button" onClick={() => void estimate()} disabled={aiState === 'loading'} className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 p-3 font-bold text-cyan-800 disabled:opacity-60"><Sparkles size={18}/>{aiState === 'loading' ? 'AIが計算中…' : 'AIで栄養情報を補完'}</button>
+    {aiMessage && <p role={aiState === 'error' ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${aiState === 'error' ? 'bg-red-50 text-red-700' : 'bg-cyan-50 text-cyan-900'}`}>{aiMessage}</p>}
+    <div className="grid grid-cols-2 gap-2">{([['kcal', 'カロリー'], ['protein', 'たんぱく質 (g)'], ['fat', '脂質 (g)'], ['carbs', '炭水化物 (g)']] as const).map(([field, label]) => <label key={field} className="text-sm font-semibold">{label}<input required min="0" max="20000" step="0.1" type="number" name={field} value={values[field]} onChange={event => setValues(current => ({ ...current, [field]: event.target.value }))} className={fieldClass} /></label>)}</div>
+    <p className="text-xs text-gray-500">AIの栄養値は推定です。商品表示や実際の材料を優先し、必要に応じて修正してください。</p>
+  </>;
+}
 const ExerciseFields = () => <><label className="block text-sm font-semibold">運動名<input autoFocus required maxLength={80} name="name" className={fieldClass} /></label><label className="block text-sm font-semibold">時間（分）<input required min="1" max="1440" type="number" name="minutes" className={fieldClass} /></label><label className="block text-sm font-semibold">消費カロリー<input required min="0" max="20000" type="number" name="kcal" className={fieldClass} /></label></>;
 const NumberField = ({ label, value, max, set }: { label: string; value: number | ''; max: number; set: (value: number) => void }) => <label className="block text-sm font-semibold">{label}<input type="number" min="0" max={max} step="0.1" value={value} onChange={event => set(Number(event.target.value))} className={fieldClass} /></label>;
 const DeleteButton = ({ label, onClick }: { label: string; onClick: () => void }) => <button aria-label={label} onClick={onClick} className="rounded-full p-2 text-red-500"><Trash2 size={17} /></button>;
