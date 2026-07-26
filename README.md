@@ -63,10 +63,10 @@ cp .env.example .env.local
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
 
-VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProduction、Preview、Development用として登録し、Redeployします。`service_role`キーやデータベースパスワードは、ブラウザ用環境変数へ絶対に登録しないでください。
+VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProduction、Preview、Development用として登録し、Redeployします。旧設定との互換性のため`NEXT_PUBLIC_SUPABASE_ANON_KEY`も利用できますが、新規設定ではSupabaseの表示名と同じ`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`を使用します。`service_role`キーやデータベースパスワードは、ブラウザ用環境変数へ絶対に登録しないでください。
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
 

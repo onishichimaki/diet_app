@@ -9,7 +9,9 @@ export const normalizePublicEnv = (value: string | undefined) => {
 };
 
 const supabaseUrl = normalizePublicEnv(process.env.NEXT_PUBLIC_SUPABASE_URL).replace(/\/+$/, '');
-const supabaseKey = normalizePublicEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const supabaseKey = normalizePublicEnv(
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+);
 
 export const supabaseConfigured = Boolean(
   supabaseUrl && supabaseKey,
