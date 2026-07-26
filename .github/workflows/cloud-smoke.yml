@@ -18,7 +18,7 @@ jobs:
         id: cloud
         run: |
           set -euo pipefail
-          http_status="$(curl --silent --show-error --retry 5 --retry-delay 15 --max-time 30 --output /tmp/cloud-response --write-out '%{http_code}' https://diet-app-chimaki.vercel.app/api/cloud-diagnostics)"
+          http_status="$(curl --location --silent --show-error --retry 5 --retry-delay 15 --max-time 30 --output /tmp/cloud-response --write-out '%{http_code}' https://diet-app-chimaki.vercel.app/api/cloud-diagnostics)"
           response="$(cat /tmp/cloud-response)"
           echo "$response"
           if echo "$response" | jq -e . >/dev/null 2>&1; then
