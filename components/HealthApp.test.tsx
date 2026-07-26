@@ -119,4 +119,19 @@ describe('HealthApp interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     expect(await screen.findByText('45分', { exact: false })).toBeTruthy();
   });
+
+  it('数量変更で栄養値を再計算し、お気に入りへ登録できる', async () => {
+    render(<HealthApp initialTab="記録" />);
+    await waitFor(() => expect(localStorage.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'ヨーグルトとベリーをお気に入り登録' }));
+    expect(screen.getByRole('button', { name: 'ヨーグルトとベリーをお気に入り解除' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'ヨーグルトとベリーを編集' }));
+    fireEvent.change(screen.getByLabelText('数量'), { target: { value: '2' } });
+    expect((screen.getByLabelText('カロリー') as HTMLInputElement).value).toBe('560');
+    fireEvent.change(screen.getByLabelText('食べた時刻'), { target: { value: '08:15' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '朝食後' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await screen.findByText('08:15 · 2人前', { exact: false })).toBeTruthy();
+    expect(screen.getByText('朝食後')).toBeTruthy();
+  });
 });

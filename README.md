@@ -13,6 +13,9 @@
 - Local Storageのスキーマ検証と、Service Workerによるオフライン動作
 - Supabase Authのメールリンクログインと、ユーザー単位のクラウド同期
 - Geminiによる料理名・材料・人数からの1人分カロリー/PFC推定、複数食品の個別補完
+- 食事の数量・単位・時刻・メモ、お気に入り、履歴からのワンタップ再登録
+- Apple Health XMLおよびHealth Connect互換JSONのファイル取り込み
+- 日付別の更新時刻を使った端末間競合マージ、クラウドデータ・アカウント削除
 - インストール可能なManifestとマスカブルアイコン
 
 ## ローカルで起動する
@@ -72,6 +75,12 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 この配備先専用の保護策として、Project URLが未設定または`xxxxxxxxxxxx.supabase.co`という説明用プレースホルダーのままの場合は、Health Pocket用の公開Project URLへ補正する。Project URLは公開識別子であり秘密鍵ではない。Publishable Keyは引き続きVercel環境変数から取得する。
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
+
+アカウント削除を有効にするには、Supabase SQL Editorで`supabase/migrations/002_account_deletion.sql`を一度実行してください。「健康」画面からクラウド上の健康データだけを削除する操作と、認証アカウントを含めて完全削除する操作を選べます。
+
+## Apple Health / Health Connectから取り込む
+
+ブラウザPWAはOSのHealthKit/Health Connectへ直接アクセスできないため、公式のエクスポート機能で書き出したファイルを「健康 → データ管理」から選択します。Apple Healthの`export.xml`では体重・歩数・歩行距離・睡眠を、Health Connectでは`date`と健康値を含むJSONを取り込めます。既存日の食事や運動は残し、取り込んだ測定項目だけを更新します。
 
 ## Geminiで栄養情報を補完する
 

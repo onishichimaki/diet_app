@@ -2,7 +2,7 @@
 
 import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { HealthStore, loadHealthStore } from './health';
+import { HealthStore, loadHealthStore, mergeHealthStores, sampleStore } from './health';
 import { getSupabaseClient, supabaseConfigured, supabaseHost } from './supabase';
 
 export type CloudState = {
@@ -12,6 +12,8 @@ export type CloudState = {
   message: string;
   sendMagicLink: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteCloudData: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 };
 
 export function useCloudSync(
@@ -56,7 +58,7 @@ export function useCloudSync(
         return;
       }
       if (data?.data) {
-        setStore(loadHealthStore(JSON.stringify(data.data)));
+        setStore(current => mergeHealthStores(current, loadHealthStore(JSON.stringify(data.data))));
       } else {
         const { error: uploadError } = await supabase.from('health_stores').insert({
           user_id: nextUser.id,
@@ -132,5 +134,19 @@ export function useCloudSync(
     setMessage('ログアウトしました。端末内データは残っています');
   };
 
-  return { configured: supabaseConfigured, user, status, message, sendMagicLink, signOut };
+  const deleteCloudData = async () => {
+    const supabase = getSupabaseClient(); if (!supabase || !user) return;
+    setStatus('同期中'); const { error } = await supabase.from('health_stores').delete().eq('user_id', user.id);
+    if (error) { setStatus('エラー'); setMessage(`クラウドデータを削除できませんでした: ${error.message}`); return; }
+    hydratedUser.current = null; await supabase.auth.signOut(); setUser(null); setStore(sampleStore); setStatus('未ログイン'); setMessage('クラウドデータを削除しました');
+  };
+
+  const deleteAccount = async () => {
+    const supabase = getSupabaseClient(); if (!supabase || !user) return;
+    setStatus('同期中'); const { error } = await supabase.rpc('delete_current_user');
+    if (error) { setStatus('エラー'); setMessage(`アカウントを削除できませんでした: ${error.message}`); return; }
+    hydratedUser.current = null; await supabase.auth.signOut(); setUser(null); setStore(sampleStore); setStatus('未ログイン'); setMessage('アカウントと健康データを削除しました');
+  };
+
+  return { configured: supabaseConfigured, user, status, message, sendMagicLink, signOut, deleteCloudData, deleteAccount };
 }

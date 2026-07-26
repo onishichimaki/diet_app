@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Cloud, Download, Dumbbell, Flame, HeartPulse, Home, LogOut, MoonStar, MoreHorizontal, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
-import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
+import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Cloud, Download, Dumbbell, Flame, Heart, HeartPulse, Home, LogOut, MoonStar, MoreHorizontal, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2, Upload, Weight, X } from 'lucide-react';
+import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, parseHealthImport, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
 import { CloudState, useCloudSync } from '@/lib/useCloudSync';
 import { splitMealNames, type NutritionEstimate } from '@/lib/gemini';
 
@@ -11,12 +11,12 @@ type Modal = 'meal' | 'exercise' | 'menu' | null;
 const tabs: Array<[Tab, typeof Home, string]> = [['今日', Home, '今日'], ['記録', Activity, 'フィットネス'], ['レポート', MoonStar, '睡眠'], ['目標', HeartPulse, '健康']];
 const fieldClass = 'mt-1 w-full rounded-xl border border-gray-200 bg-white p-3 text-base focus:border-leaf focus:ring-2 focus:ring-leaf/20';
 
-function parseMealItems(value: FormDataEntryValue | null, type: MealType): Meal[] {
+function parseMealItems(value: FormDataEntryValue | null, type: MealType, details: Pick<Meal, 'quantity' | 'unit' | 'time' | 'note'>): Meal[] {
   if (typeof value !== 'string') return [];
   try {
     const items = JSON.parse(value) as NutritionEstimate[];
     if (!Array.isArray(items)) return [];
-    return items.filter(item => item && item.name.trim()).map(item => ({ id: crypto.randomUUID(), type, name: item.name.trim(), kcal: Number(item.kcal), protein: Number(item.protein), fat: Number(item.fat), carbs: Number(item.carbs) }));
+    return items.filter(item => item && item.name.trim()).map(item => ({ ...details, id: crypto.randomUUID(), type, name: item.name.trim(), kcal: Number(item.kcal), protein: Number(item.protein), fat: Number(item.fat), carbs: Number(item.carbs) }));
   } catch { return []; }
 }
 
@@ -34,7 +34,7 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   useEffect(() => { if (loaded) localStorage.setItem(storageKey, JSON.stringify(store)); }, [loaded, store]);
 
   const day = store.records[selectedDate] ?? emptyDay(selectedDate);
-  const updateDay = (next: DayRecord) => setStore(current => ({ ...current, sample: false, records: { ...current.records, [selectedDate]: next } }));
+  const updateDay = (next: DayRecord) => setStore(current => ({ ...current, sample: false, records: { ...current.records, [selectedDate]: { ...next, modifiedAt: new Date().toISOString() } } }));
   const nutrients = useMemo(() => totals(day.meals), [day.meals]);
 
   const saveMeal = (form: FormData, target?: Meal) => {
@@ -42,8 +42,8 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
     const originalName = target?.name ?? String(form.get('originalName') ?? '');
     const originalType = target?.type ?? String(form.get('originalType') ?? '');
     const type = form.get('type') as MealType;
-    const meal: Meal = { id: mealId || crypto.randomUUID(), type, name: String(form.get('name')).trim(), kcal: Number(form.get('kcal')), protein: Number(form.get('protein')), fat: Number(form.get('fat')), carbs: Number(form.get('carbs')) };
-    const mealItems = !target ? parseMealItems(form.get('mealItems'), type) : [];
+    const meal: Meal = { id: mealId || crypto.randomUUID(), type, name: String(form.get('name')).trim(), kcal: Number(form.get('kcal')), protein: Number(form.get('protein')), fat: Number(form.get('fat')), carbs: Number(form.get('carbs')), quantity: Number(form.get('quantity')) || 1, unit: String(form.get('unit') || '人前'), time: String(form.get('time') || ''), note: String(form.get('note') || '').trim() };
+    const mealItems = !target ? parseMealItems(form.get('mealItems'), type, { quantity: meal.quantity, unit: meal.unit, time: meal.time, note: meal.note }) : [];
     const splitNames = !target ? splitMealNames(meal.name) : [];
     const dividedItems = mealItems.length > 1 ? mealItems : splitNames.length > 1 ? splitNames.map(name => ({ ...meal, id: crypto.randomUUID(), name, kcal: Number((meal.kcal / splitNames.length).toFixed(1)), protein: Number((meal.protein / splitNames.length).toFixed(1)), fat: Number((meal.fat / splitNames.length).toFixed(1)), carbs: Number((meal.carbs / splitNames.length).toFixed(1)) })) : [];
     setStore(current => {
@@ -51,7 +51,7 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
       const matchesTarget = (item: Meal) => item.id === meal.id || Boolean(originalName && item.name === originalName && item.type === originalType);
       const exists = currentDay.meals.some(matchesTarget);
       const meals = dividedItems.length > 1 ? [...currentDay.meals, ...dividedItems] : exists ? currentDay.meals.map(item => matchesTarget(item) ? { ...meal, id: item.id } : item) : [...currentDay.meals, meal];
-      return { ...current, sample: false, records: { ...current.records, [selectedDate]: { ...currentDay, meals } } };
+      return { ...current, sample: false, records: { ...current.records, [selectedDate]: { ...currentDay, meals, modifiedAt: new Date().toISOString() } } };
     });
     setEditingMeal(null); setModal(null);
   };
@@ -65,7 +65,7 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
     {store.sample && <div className="mx-5 mb-4 flex items-center justify-between rounded-2xl bg-lime/20 px-4 py-3 text-sm"><span><b>サンプルデータ</b>を表示中</span><button className="font-bold text-leaf" onClick={() => setStore({ ...sampleStore, records: {}, sample: false })}>空で始める</button></div>}
     <div className="space-y-5 px-5">
       {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} onStart={() => setModal('exercise')} />}
-      {tab === '記録' && <Records day={day} store={store} date={selectedDate} updateDay={updateDay} open={modal => { if (modal === 'meal') setEditingMeal(null); if (modal === 'exercise') setEditingExercise(null); setModal(modal); }} editMeal={meal => { setEditingMeal(meal); setModal('meal'); }} editExercise={exercise => { setEditingExercise(exercise); setModal('exercise'); }} />}
+      {tab === '記録' && <Records day={day} store={store} setStore={setStore} date={selectedDate} updateDay={updateDay} open={modal => { if (modal === 'meal') setEditingMeal(null); if (modal === 'exercise') setEditingExercise(null); setModal(modal); }} editMeal={meal => { setEditingMeal(meal); setModal('meal'); }} editExercise={exercise => { setEditingExercise(exercise); setModal('exercise'); }} />}
       {tab === 'レポート' && <Reports store={store} date={selectedDate} />}
       {tab === '目標' && <Settings store={store} setStore={setStore} cloud={cloud} />}
     </div>
@@ -120,7 +120,7 @@ function DashboardTile({ tone, icon, label, value, note, progress }: { tone: str
   return <div className={`dashboard-tile ${tone}`}><span className="tile-icon">{icon}</span><div className="min-w-0"><p>{label}</p><strong>{value}</strong>{note && <small>{note}</small>}</div>{progress !== undefined && <i style={{ width: `${Math.min(100, progress)}%` }} />}</div>;
 }
 
-function Records({ day, store, date, updateDay, open, editMeal, editExercise }: { day: DayRecord; store: HealthStore; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void; editMeal: (meal: Meal) => void; editExercise: (exercise: Exercise) => void }) {
+function Records({ day, store, setStore, date, updateDay, open, editMeal, editExercise }: { day: DayRecord; store: HealthStore; setStore: React.Dispatch<React.SetStateAction<HealthStore>>; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void; editMeal: (meal: Meal) => void; editExercise: (exercise: Exercise) => void }) {
   const [period, setPeriod] = useState<ReportPeriod>('日');
   const [showAllNutrients, setShowAllNutrients] = useState(false);
   const [mealFilter, setMealFilter] = useState<MealType | 'すべて'>('すべて');
@@ -128,12 +128,16 @@ function Records({ day, store, date, updateDay, open, editMeal, editExercise }: 
   const periodTotals = totals(days.flatMap(record => record.meals));
   const nutrients = { kcal: Math.round(periodTotals.kcal / days.length), protein: Math.round(periodTotals.protein / days.length), fat: Math.round(periodTotals.fat / days.length), carbs: Math.round(periodTotals.carbs / days.length) };
   const visibleMeals = mealFilter === 'すべて' ? day.meals : day.meals.filter(meal => meal.type === mealFilter);
+  const history = Object.values(store.records).flatMap(record => record.meals).reverse().filter((meal, index, all) => all.findIndex(item => item.name === meal.name) === index).slice(0, 8);
+  const copyMeal = (meal: Meal) => updateDay({ ...day, meals: [...day.meals, { ...meal, id: crypto.randomUUID() }] });
+  const toggleFavorite = (meal: Meal) => setStore(current => ({ ...current, favorites: current.favorites.some(item => item.name === meal.name) ? current.favorites.filter(item => item.name !== meal.name) : [...current.favorites, { ...meal, id: crypto.randomUUID() }] }));
   return <>
     <div className="record-toolbar"><div><p>今日</p><h2>飲食物</h2></div><button onClick={() => open('meal')} aria-label="食事を追加"><Plus /></button></div>
     <div className="record-period">{['日', '週', '月', '3か月', '年'].map(value => <button key={value} onClick={() => setPeriod(value as ReportPeriod)} className={period === value ? 'active' : ''}>{value}</button>)}</div>
     <section className="nutrition-panel"><div className="flex items-center justify-between"><h2>主要栄養素の目標</h2><button onClick={() => setShowAllNutrients(value => !value)}>{showAllNutrients ? '閉じる' : '全栄養素を見る'}</button></div><p className="nutrition-copy">炭水化物、たんぱく質、脂質のバランスを保つことは、体力や気力の維持と回復に重要です。</p><NutrientProgress label="炭水化物" value={nutrients.carbs} goal={207} color="#05617a" /><NutrientProgress label="脂質" value={nutrients.fat} goal={50} color="#a1262c" /><NutrientProgress label="たんぱく質" value={nutrients.protein} goal={108} color="#8a5b00" />{showAllNutrients && <div className="all-nutrients"><span>摂取カロリー <b>{nutrients.kcal.toLocaleString()} kcal</b></span><span>食物繊維 <b>{Math.round(nutrients.carbs * .08)} g</b></span><span>糖質 <b>{Math.round(nutrients.carbs * .72)} g</b></span></div>}</section>
     <div className="meal-filters"><button onClick={() => setMealFilter('すべて')} className={mealFilter === 'すべて' ? 'active' : ''}>✓ すべて</button>{MEAL_TYPES.map(type => <button onClick={() => setMealFilter(type)} className={mealFilter === type ? 'active' : ''} key={type}>{type}</button>)}</div>
-    <MealList meals={visibleMeals} edit={editMeal} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
+    <MealList meals={visibleMeals} favorites={store.favorites} favorite={toggleFavorite} edit={editMeal} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
+    <section className="card p-5"><h2 className="font-bold">お気に入り・最近の食事</h2><div className="mt-3 flex flex-wrap gap-2">{[...store.favorites, ...history].filter((meal, index, all) => all.findIndex(item => item.name === meal.name) === index).map(meal => <button key={meal.name} onClick={() => copyMeal(meal)} className="rounded-full border bg-white px-3 py-2 text-sm">＋ {meal.name}</button>)}</div></section>
     <button onClick={() => open('exercise')} className="action-button dark"><Activity size={19} />運動を追加</button>
     <section className="card p-5"><h2 className="font-bold">運動記録</h2>{day.exercises.length === 0 ? <Empty /> : day.exercises.map(item => <div className="mt-3 flex items-center justify-between border-t pt-3" key={item.id}><div><b>{item.name}</b><p className="text-sm text-gray-500">{item.minutes}分・{item.kcal} kcal</p></div><div className="flex"><button type="button" aria-label={`${item.name}を編集`} onClick={() => editExercise(item)} className="rounded-full p-2 text-cyan-700"><Pencil size={17}/></button><DeleteButton label={`${item.name}を削除`} onClick={() => updateDay({ ...day, exercises: day.exercises.filter(exercise => exercise.id !== item.id) })} /></div></div>)}</section>
     <section className="card p-5"><h2 className="font-bold">測定値</h2><div className="mt-4 grid grid-cols-2 gap-3"><NumberField label="体重 (kg)" value={day.weight ?? ''} max={500} set={value => updateDay({ ...day, weight: value || null })} /><NumberField label="歩数" value={day.steps} max={200000} set={value => updateDay({ ...day, steps: value })} /><NumberField label="距離 (km)" value={day.distance} max={1000} set={value => updateDay({ ...day, distance: value })} /><NumberField label="睡眠 (時間)" value={day.sleep ?? ''} max={24} set={value => updateDay({ ...day, sleep: value || null })} /></div></section>
@@ -145,13 +149,13 @@ function NutrientProgress({ label, value, goal, color }: { label: string; value:
   return <div className="nutrient-progress"><div><b>{label} · {Math.round(percent)}% · {value}/{goal} g</b><span className={status === '範囲内' ? 'good' : ''}>{status}</span></div><div className="track"><i style={{ width: `${Math.min(100, percent)}%`, background: color }} /><em style={{ left: `${Math.min(92, 100)}%` }} /></div></div>;
 }
 
-function MealList({ meals, remove, edit }: { meals: Meal[]; remove?: (id: string) => void; edit?: (meal: Meal) => void }) {
+function MealList({ meals, favorites = [], remove, edit, favorite }: { meals: Meal[]; favorites?: Meal[]; remove?: (id: string) => void; edit?: (meal: Meal) => void; favorite?: (meal: Meal) => void }) {
   return <section className="meal-list">{MEAL_TYPES.map(type => {
     const list = meals.filter(meal => meal.type === type);
     const kcal = list.reduce((sum, item) => sum + item.kcal, 0);
     return <details key={type} open={list.length > 0}>
       <summary><div><b>{type}</b><span>{list.length}個のアイテム</span></div><strong>{kcal.toLocaleString()} kcal</strong></summary>
-      {list.length === 0 ? <Empty /> : list.map(meal => <div className="meal-row" key={meal.id}><div><p>{meal.name}</p><small>P {meal.protein} · F {meal.fat} · C {meal.carbs}</small></div><div className="flex items-center">{edit && <button type="button" aria-label={`${meal.name}を編集`} onClick={() => edit(meal)} className="rounded-full p-2 text-cyan-700"><Pencil size={17}/></button>}{remove && <DeleteButton label={`${meal.name}を削除`} onClick={() => remove(meal.id)} />}</div></div>)}
+      {list.length === 0 ? <Empty /> : list.map(meal => <div className="meal-row" key={meal.id}><div><p>{meal.name}</p><small>{meal.time && `${meal.time} · `}{meal.quantity ?? 1}{meal.unit ?? '人前'} · P {meal.protein} · F {meal.fat} · C {meal.carbs}</small>{meal.note && <small className="block">{meal.note}</small>}</div><div className="flex items-center">{favorite && <button type="button" aria-label={`${meal.name}をお気に入り${favorites.some(item => item.name === meal.name) ? '解除' : '登録'}`} onClick={() => favorite(meal)} className="rounded-full p-2 text-rose-500"><Heart size={17} fill={favorites.some(item => item.name === meal.name) ? 'currentColor' : 'none'}/></button>}{edit && <button type="button" aria-label={`${meal.name}を編集`} onClick={() => edit(meal)} className="rounded-full p-2 text-cyan-700"><Pencil size={17}/></button>}{remove && <DeleteButton label={`${meal.name}を削除`} onClick={() => remove(meal.id)} />}</div></div>)}
     </details>;
   })}</section>;
 }
@@ -184,14 +188,17 @@ function TrendCard({ title, value, values, status, bars }: { title: string; valu
 
 
 function Settings({ store, setStore, cloud }: { store: HealthStore; setStore: (store: HealthStore) => void; cloud: CloudState }) {
+  const [importMessage, setImportMessage] = useState('');
   const setGoal = (key: keyof Goals, value: number) => setStore({ ...store, sample: false, goals: { ...store.goals, [key]: value } });
   const download = () => { const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `health-pocket-${dateKey()}.json`; link.click(); URL.revokeObjectURL(link.href); };
-  return <><CloudPanel cloud={cloud} /><section className="card p-5"><h2 className="text-xl font-bold">わたしの目標</h2><div className="mt-4 space-y-3"><NumberField label="1日のカロリー (kcal)" value={store.goals.kcal} max={10000} set={value => setGoal('kcal', value)} /><NumberField label="目標体重 (kg)" value={store.goals.weight} max={500} set={value => setGoal('weight', value)} /><NumberField label="1日の歩数" value={store.goals.steps} max={200000} set={value => setGoal('steps', value)} /><NumberField label="睡眠時間" value={store.goals.sleep} max={24} set={value => setGoal('sleep', value)} /></div></section><section className="card p-5"><h2 className="font-bold">データ管理</h2><button onClick={download} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border p-3 font-bold"><Download size={18} />JSONをエクスポート</button><button onClick={() => { if (confirm('すべての記録をサンプルデータに戻しますか？')) setStore(sampleStore); }} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 p-3 font-bold text-red-600"><RotateCcw size={18} />データを初期化</button></section></>;
+  const restore = async (file?: File) => { if (!file) return; const restored = loadHealthStore(await file.text()); if (!confirm('現在のデータをバックアップ内容で置き換えますか？')) return; setStore(restored); setImportMessage('バックアップを復元しました'); };
+  const importHealth = async (file?: File) => { if (!file) return; const imported = parseHealthImport(await file.text()); if (!imported.length) { setImportMessage('対応する健康データが見つかりませんでした'); return; } const records = { ...store.records }; imported.forEach(item => { const day = records[item.date] ?? emptyDay(item.date); records[item.date] = { ...day, weight: item.weight ?? day.weight, steps: item.steps ?? day.steps, distance: item.distance ?? day.distance, sleep: item.sleep ?? day.sleep, modifiedAt: new Date().toISOString() }; }); setStore({ ...store, records, sample: false }); setImportMessage(`${imported.length}日分の健康データを取り込みました`); };
+  return <><CloudPanel cloud={cloud} /><section className="card p-5"><h2 className="text-xl font-bold">わたしの目標</h2><div className="mt-4 space-y-3"><NumberField label="1日のカロリー (kcal)" value={store.goals.kcal} max={10000} set={value => setGoal('kcal', value)} /><NumberField label="目標体重 (kg)" value={store.goals.weight} max={500} set={value => setGoal('weight', value)} /><NumberField label="1日の歩数" value={store.goals.steps} max={200000} set={value => setGoal('steps', value)} /><NumberField label="睡眠時間" value={store.goals.sleep} max={24} set={value => setGoal('sleep', value)} /></div></section><section className="card p-5"><h2 className="font-bold">データ管理</h2><button onClick={download} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border p-3 font-bold"><Download size={18} />JSONをエクスポート</button><label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 font-bold"><Upload size={18}/>JSONバックアップを復元<input className="sr-only" type="file" accept="application/json,.json" onChange={event => void restore(event.target.files?.[0])}/></label><label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 font-bold"><HeartPulse size={18}/>Apple Health / Health Connectを取り込む<input className="sr-only" type="file" accept=".xml,.json,text/xml,application/json" onChange={event => void importHealth(event.target.files?.[0])}/></label>{importMessage && <p role="status" className="mt-2 text-sm text-leaf">{importMessage}</p>}<button onClick={() => { if (confirm('すべての記録をサンプルデータに戻しますか？')) setStore(sampleStore); }} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 p-3 font-bold text-red-600"><RotateCcw size={18} />データを初期化</button></section></>;
 }
 
 function CloudPanel({ cloud }: { cloud: CloudState }) {
   const [email, setEmail] = useState('');
-  return <section className="card p-5"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-bold"><Cloud size={21} />クラウド同期</h2><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${cloud.status === '同期済み' ? 'bg-emerald-100 text-emerald-700' : cloud.status === 'エラー' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{cloud.status}</span></div>{!cloud.configured ? <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><b>Supabaseの接続設定が必要です。</b><p className="mt-1">VercelへNEXT_PUBLIC_SUPABASE_URLとNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEYを登録してください。</p></div> : cloud.user ? <div className="mt-4"><p className="text-sm text-gray-500">{cloud.user.email} で同期しています</p><button onClick={cloud.signOut} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border p-3 font-bold"><LogOut size={18} />ログアウト</button></div> : <form className="mt-4" onSubmit={event => { event.preventDefault(); void cloud.sendMagicLink(email); }}><label className="text-sm font-semibold">メールアドレス<input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} className={fieldClass} /></label><button className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-leaf p-3 font-bold text-white"><Cloud size={18} />ログインリンクを送る</button><p className="mt-2 text-xs text-gray-500">届いたメールのリンクを開くとログインし、この端末の記録をクラウドへ移行します。</p></form>}{cloud.message && <p role="status" className="mt-3 text-sm text-gray-600">{cloud.message}</p>}</section>;
+  return <section className="card p-5"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-bold"><Cloud size={21} />クラウド同期</h2><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${cloud.status === '同期済み' ? 'bg-emerald-100 text-emerald-700' : cloud.status === 'エラー' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{cloud.status}</span></div>{!cloud.configured ? <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><b>Supabaseの接続設定が必要です。</b><p className="mt-1">VercelへNEXT_PUBLIC_SUPABASE_URLとNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEYを登録してください。</p></div> : cloud.user ? <div className="mt-4"><p className="text-sm text-gray-500">{cloud.user.email} で同期しています</p><button onClick={cloud.signOut} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border p-3 font-bold"><LogOut size={18} />ログアウト</button><button onClick={() => confirm('クラウドの健康データを削除しますか？') && void cloud.deleteCloudData()} className="mt-2 w-full rounded-xl border border-red-200 p-3 font-bold text-red-600">クラウドデータを削除</button><button onClick={() => confirm('アカウントと全健康データを完全に削除しますか？') && void cloud.deleteAccount()} className="mt-2 w-full rounded-xl bg-red-600 p-3 font-bold text-white">アカウントを削除</button></div> : <form className="mt-4" onSubmit={event => { event.preventDefault(); void cloud.sendMagicLink(email); }}><label className="text-sm font-semibold">メールアドレス<input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} className={fieldClass} /></label><button className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-leaf p-3 font-bold text-white"><Cloud size={18} />ログインリンクを送る</button><p className="mt-2 text-xs text-gray-500">届いたメールのリンクを開くとログインし、この端末の記録をクラウドへ移行します。</p></form>}{cloud.message && <p role="status" className="mt-3 text-sm text-gray-600">{cloud.message}</p>}</section>;
 }
 
 function QuickMenu({ close, openSettings, openRecords }: { close: () => void; openSettings: () => void; openRecords: () => void }) {
@@ -205,10 +212,16 @@ function MealFields({ initialMeal }: { initialMeal?: Meal | null }) {
   const [name, setName] = useState(initialMeal?.name ?? '');
   const [ingredients, setIngredients] = useState('');
   const [servings, setServings] = useState('1');
+  const [quantity, setQuantity] = useState(String(initialMeal?.quantity ?? 1));
   const [values, setValues] = useState({ kcal: initialMeal ? String(initialMeal.kcal) : '', protein: initialMeal ? String(initialMeal.protein) : '', fat: initialMeal ? String(initialMeal.fat) : '', carbs: initialMeal ? String(initialMeal.carbs) : '' });
   const [mealItems, setMealItems] = useState<NutritionEstimate[]>([]);
   const [aiState, setAiState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [aiMessage, setAiMessage] = useState('');
+  const changeQuantity = (next: string) => {
+    const previous = Number(quantity) || 1; const value = Number(next) || 0;
+    if (value > 0) setValues(current => Object.fromEntries(Object.entries(current).map(([key, amount]) => [key, String(Number((Number(amount || 0) * value / previous).toFixed(1)))])) as typeof current);
+    setQuantity(next);
+  };
 
   const estimate = async () => {
     if (!name.trim() && !ingredients.trim()) { setAiState('error'); setAiMessage('料理名または材料を入力してください。'); return; }
@@ -238,6 +251,8 @@ function MealFields({ initialMeal }: { initialMeal?: Meal | null }) {
     {initialMeal && <><input type="hidden" name="mealId" value={initialMeal.id} /><input type="hidden" name="originalName" value={initialMeal.name} /><input type="hidden" name="originalType" value={initialMeal.type} /></>}
     <label className="block text-sm font-semibold">食事区分<select name="type" defaultValue={initialMeal?.type ?? '朝食'} className={fieldClass}>{MEAL_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
     <label className="block text-sm font-semibold">料理名<input autoFocus required maxLength={200} name="name" value={name} onChange={event => { setName(event.target.value); setMealItems([]); }} className={fieldClass} placeholder="例：カレー、ヨーグルト" /></label>
+    <div className="grid grid-cols-2 gap-2"><label className="text-sm font-semibold">数量<input required min="0.01" max="10000" step="0.01" type="number" name="quantity" value={quantity} onChange={event => changeQuantity(event.target.value)} className={fieldClass} /></label><label className="text-sm font-semibold">単位<select name="unit" defaultValue={initialMeal?.unit ?? '人前'} className={fieldClass}>{['人前', 'g', 'ml', '個', '枚', '杯', '皿', '本'].map(unit => <option key={unit}>{unit}</option>)}</select></label></div>
+    <div className="grid grid-cols-2 gap-2"><label className="text-sm font-semibold">食べた時刻<input type="time" name="time" defaultValue={initialMeal?.time} className={fieldClass} /></label><label className="text-sm font-semibold">メモ<input maxLength={200} name="note" defaultValue={initialMeal?.note} placeholder="外食、体調など" className={fieldClass} /></label></div>
     {!initialMeal && <p className="text-xs text-gray-500">複数の食品は「、」または「,」で区切ると、AIが食品ごとに栄養情報を作成します（最大10品）。</p>}
     <label className="block text-sm font-semibold">材料・分量（AI補完用）<textarea maxLength={2000} value={ingredients} onChange={event => setIngredients(event.target.value)} className={`${fieldClass} min-h-24 resize-y`} placeholder={'例：鮭100g\n玄米150g\nブロッコリー80g'} /></label>
     <label className="block text-sm font-semibold">レシピの人数<input min="0.1" max="100" step="0.1" type="number" value={servings} onChange={event => setServings(event.target.value)} className={fieldClass} /></label>
