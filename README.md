@@ -76,7 +76,7 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
 
-アカウント削除を有効にするには、Supabase SQL Editorで`supabase/migrations/002_account_deletion.sql`を一度実行してください。「健康」画面からクラウド上の健康データだけを削除する操作と、認証アカウントを含めて完全削除する操作を選べます。
+アカウント削除を有効にするには、[Health PocketのSupabase SQL Editorを開く](https://supabase.com/dashboard/project/wpufsuukptuswzvsfemg/sql/new)を押し、[`supabase/migrations/002_account_deletion.sql`](supabase/migrations/002_account_deletion.sql)の内容を貼り付けて「Run」を一度押してください。「健康」画面からクラウド上の健康データだけを削除する操作と、認証アカウントを含めて完全削除する操作を選べます。
 
 ## Apple Health / Health Connectから取り込む
 
