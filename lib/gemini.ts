@@ -8,6 +8,12 @@ export type NutritionEstimate = {
   note: string;
 };
 
+export const splitMealNames = (value: string) => value
+  .split(/[、,，\n]+/)
+  .map(item => item.trim())
+  .filter(Boolean)
+  .slice(0, 10);
+
 export type NutritionRequest = {
   name: string;
   ingredients: string;

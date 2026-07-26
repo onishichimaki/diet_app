@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractGeminiJson, parseNutritionEstimate, selectGeminiModel, validateNutritionRequest } from './gemini';
+import { extractGeminiJson, parseNutritionEstimate, selectGeminiModel, splitMealNames, validateNutritionRequest } from './gemini';
 
 describe('Gemini nutrition helpers', () => {
+  it('読点・カンマ・改行で複数食品を分割する', () => {
+    expect(splitMealNames('カレー、ヨーグルト, サラダ\nりんご')).toEqual(['カレー', 'ヨーグルト', 'サラダ', 'りんご']);
+  });
   it('栄養推定リクエストを検証する', () => {
     expect(validateNutritionRequest({ name: '親子丼', ingredients: '鶏肉 100g', servings: 2 })).toEqual({ name: '親子丼', ingredients: '鶏肉 100g', servings: 2 });
     expect(validateNutritionRequest({ name: '', ingredients: '', servings: 1 })).toBeNull();

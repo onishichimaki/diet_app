@@ -4,12 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Apple, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Cloud, Download, Dumbbell, Flame, HeartPulse, Home, LogOut, MoonStar, MoreHorizontal, Pencil, Plus, RotateCcw, Ruler, Sparkles, Trash2, Weight, X } from 'lucide-react';
 import { DayRecord, Exercise, Goals, HealthStore, MEAL_TYPES, Meal, MealType, average, dateKey, emptyDay, loadHealthStore, periodRecords, ReportPeriod, sampleStore, storageKey, totals } from '@/lib/health';
 import { CloudState, useCloudSync } from '@/lib/useCloudSync';
-import type { NutritionEstimate } from '@/lib/gemini';
+import { splitMealNames, type NutritionEstimate } from '@/lib/gemini';
 
 type Tab = '今日' | '記録' | 'レポート' | '目標';
 type Modal = 'meal' | 'exercise' | 'menu' | null;
 const tabs: Array<[Tab, typeof Home, string]> = [['今日', Home, '今日'], ['記録', Activity, 'フィットネス'], ['レポート', MoonStar, '睡眠'], ['目標', HeartPulse, '健康']];
 const fieldClass = 'mt-1 w-full rounded-xl border border-gray-200 bg-white p-3 text-base focus:border-leaf focus:ring-2 focus:ring-leaf/20';
+
+function parseMealItems(value: FormDataEntryValue | null, type: MealType): Meal[] {
+  if (typeof value !== 'string') return [];
+  try {
+    const items = JSON.parse(value) as NutritionEstimate[];
+    if (!Array.isArray(items)) return [];
+    return items.filter(item => item && item.name.trim()).map(item => ({ id: crypto.randomUUID(), type, name: item.name.trim(), kcal: Number(item.kcal), protein: Number(item.protein), fat: Number(item.fat), carbs: Number(item.carbs) }));
+  } catch { return []; }
+}
 
 export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -18,6 +27,7 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
   const [loaded, setLoaded] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const cloud = useCloudSync(store, setStore, loaded);
 
   useEffect(() => { queueMicrotask(() => { setStore(loadHealthStore(localStorage.getItem(storageKey))); setLoaded(true); }); }, []);
@@ -31,19 +41,23 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
     const mealId = target?.id ?? String(form.get('mealId') ?? '');
     const originalName = target?.name ?? String(form.get('originalName') ?? '');
     const originalType = target?.type ?? String(form.get('originalType') ?? '');
-    const meal: Meal = { id: mealId || crypto.randomUUID(), type: form.get('type') as MealType, name: String(form.get('name')).trim(), kcal: Number(form.get('kcal')), protein: Number(form.get('protein')), fat: Number(form.get('fat')), carbs: Number(form.get('carbs')) };
+    const type = form.get('type') as MealType;
+    const meal: Meal = { id: mealId || crypto.randomUUID(), type, name: String(form.get('name')).trim(), kcal: Number(form.get('kcal')), protein: Number(form.get('protein')), fat: Number(form.get('fat')), carbs: Number(form.get('carbs')) };
+    const mealItems = !target ? parseMealItems(form.get('mealItems'), type) : [];
+    const splitNames = !target ? splitMealNames(meal.name) : [];
+    const dividedItems = mealItems.length > 1 ? mealItems : splitNames.length > 1 ? splitNames.map(name => ({ ...meal, id: crypto.randomUUID(), name, kcal: Number((meal.kcal / splitNames.length).toFixed(1)), protein: Number((meal.protein / splitNames.length).toFixed(1)), fat: Number((meal.fat / splitNames.length).toFixed(1)), carbs: Number((meal.carbs / splitNames.length).toFixed(1)) })) : [];
     setStore(current => {
       const currentDay = current.records[selectedDate] ?? emptyDay(selectedDate);
       const matchesTarget = (item: Meal) => item.id === meal.id || Boolean(originalName && item.name === originalName && item.type === originalType);
       const exists = currentDay.meals.some(matchesTarget);
-      const meals = exists ? currentDay.meals.map(item => matchesTarget(item) ? { ...meal, id: item.id } : item) : [...currentDay.meals, meal];
+      const meals = dividedItems.length > 1 ? [...currentDay.meals, ...dividedItems] : exists ? currentDay.meals.map(item => matchesTarget(item) ? { ...meal, id: item.id } : item) : [...currentDay.meals, meal];
       return { ...current, sample: false, records: { ...current.records, [selectedDate]: { ...currentDay, meals } } };
     });
     setEditingMeal(null); setModal(null);
   };
   const saveExercise = (form: FormData) => {
-    const exercise: Exercise = { id: crypto.randomUUID(), name: String(form.get('name')).trim(), minutes: Number(form.get('minutes')), kcal: Number(form.get('kcal')) };
-    updateDay({ ...day, exercises: [...day.exercises, exercise] }); setModal(null);
+    const exercise: Exercise = { id: editingExercise?.id ?? crypto.randomUUID(), name: String(form.get('name')).trim(), minutes: Number(form.get('minutes')), kcal: Number(form.get('kcal')) };
+    updateDay({ ...day, exercises: editingExercise ? day.exercises.map(item => item.id === editingExercise.id ? exercise : item) : [...day.exercises, exercise] }); setEditingExercise(null); setModal(null);
   };
 
   return <main className="safe-bottom mx-auto min-h-screen max-w-lg overflow-hidden bg-[#f5f7fa]">
@@ -51,13 +65,13 @@ export default function HealthApp({ initialTab = '今日' }: { initialTab?: Tab 
     {store.sample && <div className="mx-5 mb-4 flex items-center justify-between rounded-2xl bg-lime/20 px-4 py-3 text-sm"><span><b>サンプルデータ</b>を表示中</span><button className="font-bold text-leaf" onClick={() => setStore({ ...sampleStore, records: {}, sample: false })}>空で始める</button></div>}
     <div className="space-y-5 px-5">
       {tab === '今日' && <Dashboard day={day} goals={store.goals} nutrients={nutrients} onRecord={() => setTab('記録')} onStart={() => setModal('exercise')} />}
-      {tab === '記録' && <Records day={day} store={store} date={selectedDate} updateDay={updateDay} open={modal => { if (modal === 'meal') setEditingMeal(null); setModal(modal); }} editMeal={meal => { setEditingMeal(meal); setModal('meal'); }} />}
+      {tab === '記録' && <Records day={day} store={store} date={selectedDate} updateDay={updateDay} open={modal => { if (modal === 'meal') setEditingMeal(null); if (modal === 'exercise') setEditingExercise(null); setModal(modal); }} editMeal={meal => { setEditingMeal(meal); setModal('meal'); }} editExercise={exercise => { setEditingExercise(exercise); setModal('exercise'); }} />}
       {tab === 'レポート' && <Reports store={store} date={selectedDate} />}
       {tab === '目標' && <Settings store={store} setStore={setStore} cloud={cloud} />}
     </div>
     <BottomNav tab={tab} setTab={setTab} />
     {modal === 'meal' && <EntryDialog key={editingMeal?.id ?? 'new-meal'} title={editingMeal ? '食事を編集' : '食事を追加'} close={() => { setEditingMeal(null); setModal(null); }} action={form => saveMeal(form, editingMeal ?? undefined)}><MealFields initialMeal={editingMeal} /></EntryDialog>}
-    {modal === 'exercise' && <EntryDialog title="運動を追加" close={() => setModal(null)} action={saveExercise}><ExerciseFields /></EntryDialog>}
+    {modal === 'exercise' && <EntryDialog key={editingExercise?.id ?? 'new-exercise'} title={editingExercise ? '運動を編集' : '運動を追加'} close={() => { setEditingExercise(null); setModal(null); }} action={saveExercise}><ExerciseFields initialExercise={editingExercise} /></EntryDialog>}
     {modal === 'menu' && <QuickMenu close={() => setModal(null)} openSettings={() => { setModal(null); setTab('目標'); }} openRecords={() => { setModal(null); setTab('記録'); }} />}
   </main>;
 }
@@ -106,7 +120,7 @@ function DashboardTile({ tone, icon, label, value, note, progress }: { tone: str
   return <div className={`dashboard-tile ${tone}`}><span className="tile-icon">{icon}</span><div className="min-w-0"><p>{label}</p><strong>{value}</strong>{note && <small>{note}</small>}</div>{progress !== undefined && <i style={{ width: `${Math.min(100, progress)}%` }} />}</div>;
 }
 
-function Records({ day, store, date, updateDay, open, editMeal }: { day: DayRecord; store: HealthStore; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void; editMeal: (meal: Meal) => void }) {
+function Records({ day, store, date, updateDay, open, editMeal, editExercise }: { day: DayRecord; store: HealthStore; date: string; updateDay: (day: DayRecord) => void; open: (modal: Modal) => void; editMeal: (meal: Meal) => void; editExercise: (exercise: Exercise) => void }) {
   const [period, setPeriod] = useState<ReportPeriod>('日');
   const [showAllNutrients, setShowAllNutrients] = useState(false);
   const [mealFilter, setMealFilter] = useState<MealType | 'すべて'>('すべて');
@@ -121,7 +135,7 @@ function Records({ day, store, date, updateDay, open, editMeal }: { day: DayReco
     <div className="meal-filters"><button onClick={() => setMealFilter('すべて')} className={mealFilter === 'すべて' ? 'active' : ''}>✓ すべて</button>{MEAL_TYPES.map(type => <button onClick={() => setMealFilter(type)} className={mealFilter === type ? 'active' : ''} key={type}>{type}</button>)}</div>
     <MealList meals={visibleMeals} edit={editMeal} remove={id => updateDay({ ...day, meals: day.meals.filter(item => item.id !== id) })} />
     <button onClick={() => open('exercise')} className="action-button dark"><Activity size={19} />運動を追加</button>
-    <section className="card p-5"><h2 className="font-bold">運動記録</h2>{day.exercises.length === 0 ? <Empty /> : day.exercises.map(item => <div className="mt-3 flex items-center justify-between border-t pt-3" key={item.id}><div><b>{item.name}</b><p className="text-sm text-gray-500">{item.minutes}分・{item.kcal} kcal</p></div><DeleteButton label={`${item.name}を削除`} onClick={() => updateDay({ ...day, exercises: day.exercises.filter(exercise => exercise.id !== item.id) })} /></div>)}</section>
+    <section className="card p-5"><h2 className="font-bold">運動記録</h2>{day.exercises.length === 0 ? <Empty /> : day.exercises.map(item => <div className="mt-3 flex items-center justify-between border-t pt-3" key={item.id}><div><b>{item.name}</b><p className="text-sm text-gray-500">{item.minutes}分・{item.kcal} kcal</p></div><div className="flex"><button type="button" aria-label={`${item.name}を編集`} onClick={() => editExercise(item)} className="rounded-full p-2 text-cyan-700"><Pencil size={17}/></button><DeleteButton label={`${item.name}を削除`} onClick={() => updateDay({ ...day, exercises: day.exercises.filter(exercise => exercise.id !== item.id) })} /></div></div>)}</section>
     <section className="card p-5"><h2 className="font-bold">測定値</h2><div className="mt-4 grid grid-cols-2 gap-3"><NumberField label="体重 (kg)" value={day.weight ?? ''} max={500} set={value => updateDay({ ...day, weight: value || null })} /><NumberField label="歩数" value={day.steps} max={200000} set={value => updateDay({ ...day, steps: value })} /><NumberField label="距離 (km)" value={day.distance} max={1000} set={value => updateDay({ ...day, distance: value })} /><NumberField label="睡眠 (時間)" value={day.sleep ?? ''} max={24} set={value => updateDay({ ...day, sleep: value || null })} /></div></section>
   </>;
 }
@@ -192,6 +206,7 @@ function MealFields({ initialMeal }: { initialMeal?: Meal | null }) {
   const [ingredients, setIngredients] = useState('');
   const [servings, setServings] = useState('1');
   const [values, setValues] = useState({ kcal: initialMeal ? String(initialMeal.kcal) : '', protein: initialMeal ? String(initialMeal.protein) : '', fat: initialMeal ? String(initialMeal.fat) : '', carbs: initialMeal ? String(initialMeal.carbs) : '' });
+  const [mealItems, setMealItems] = useState<NutritionEstimate[]>([]);
   const [aiState, setAiState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [aiMessage, setAiMessage] = useState('');
 
@@ -199,13 +214,21 @@ function MealFields({ initialMeal }: { initialMeal?: Meal | null }) {
     if (!name.trim() && !ingredients.trim()) { setAiState('error'); setAiMessage('料理名または材料を入力してください。'); return; }
     setAiState('loading'); setAiMessage('');
     try {
-      const response = await fetch('/api/ai/nutrition', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, ingredients, servings: Number(servings) }) });
-      const payload = await response.json() as { estimate?: NutritionEstimate; error?: string };
-      if (!response.ok || !payload.estimate) throw new Error(payload.error || '栄養情報を取得できませんでした。');
-      const result = payload.estimate;
-      setName(current => current.trim() || result.name);
-      setValues({ kcal: String(result.kcal), protein: String(result.protein), fat: String(result.fat), carbs: String(result.carbs) });
-      setAiState('success'); setAiMessage(`推定精度: ${result.confidence}。${result.note} 数値を確認してから保存してください。`);
+      const names = initialMeal ? [name.trim()] : splitMealNames(name);
+      const requests = names.length > 1 ? names : [name];
+      const results = await Promise.all(requests.map(async itemName => {
+        const response = await fetch('/api/ai/nutrition', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: itemName, ingredients: names.length > 1 ? '' : ingredients, servings: Number(servings) }) });
+        const payload = await response.json() as { estimate?: NutritionEstimate; error?: string };
+        if (!response.ok || !payload.estimate) throw new Error(payload.error || `${itemName || '料理'}の栄養情報を取得できませんでした。`);
+        return payload.estimate;
+      }));
+      if (results.length > 1) {
+        setMealItems(results); setAiState('success'); setAiMessage(`${results.length}品を個別に推定しました。それぞれの数値を確認・修正してから保存してください。`);
+      } else {
+        const result = results[0]; setMealItems([]); setName(current => current.trim() || result.name);
+        setValues({ kcal: String(result.kcal), protein: String(result.protein), fat: String(result.fat), carbs: String(result.carbs) });
+        setAiState('success'); setAiMessage(`推定精度: ${result.confidence}。${result.note} 数値を確認してから保存してください。`);
+      }
     } catch (error) {
       setAiState('error'); setAiMessage(error instanceof Error ? error.message : 'AI補完に失敗しました。');
     }
@@ -214,16 +237,17 @@ function MealFields({ initialMeal }: { initialMeal?: Meal | null }) {
   return <>
     {initialMeal && <><input type="hidden" name="mealId" value={initialMeal.id} /><input type="hidden" name="originalName" value={initialMeal.name} /><input type="hidden" name="originalType" value={initialMeal.type} /></>}
     <label className="block text-sm font-semibold">食事区分<select name="type" defaultValue={initialMeal?.type ?? '朝食'} className={fieldClass}>{MEAL_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
-    <label className="block text-sm font-semibold">料理名<input autoFocus required maxLength={80} name="name" value={name} onChange={event => setName(event.target.value)} className={fieldClass} placeholder="例：鮭と玄米のプレート" /></label>
+    <label className="block text-sm font-semibold">料理名<input autoFocus required maxLength={200} name="name" value={name} onChange={event => { setName(event.target.value); setMealItems([]); }} className={fieldClass} placeholder="例：カレー、ヨーグルト" /></label>
+    {!initialMeal && <p className="text-xs text-gray-500">複数の食品は「、」または「,」で区切ると、AIが食品ごとに栄養情報を作成します（最大10品）。</p>}
     <label className="block text-sm font-semibold">材料・分量（AI補完用）<textarea maxLength={2000} value={ingredients} onChange={event => setIngredients(event.target.value)} className={`${fieldClass} min-h-24 resize-y`} placeholder={'例：鮭100g\n玄米150g\nブロッコリー80g'} /></label>
     <label className="block text-sm font-semibold">レシピの人数<input min="0.1" max="100" step="0.1" type="number" value={servings} onChange={event => setServings(event.target.value)} className={fieldClass} /></label>
     <button type="button" onClick={() => void estimate()} disabled={aiState === 'loading'} className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 p-3 font-bold text-cyan-800 disabled:opacity-60"><Sparkles size={18}/>{aiState === 'loading' ? 'AIが計算中…' : 'AIで栄養情報を補完'}</button>
     {aiMessage && <p role={aiState === 'error' ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${aiState === 'error' ? 'bg-red-50 text-red-700' : 'bg-cyan-50 text-cyan-900'}`}>{aiMessage}</p>}
-    <div className="grid grid-cols-2 gap-2">{([['kcal', 'カロリー'], ['protein', 'たんぱく質 (g)'], ['fat', '脂質 (g)'], ['carbs', '炭水化物 (g)']] as const).map(([field, label]) => <label key={field} className="text-sm font-semibold">{label}<input required min="0" max="20000" step="0.1" type="number" name={field} value={values[field]} onChange={event => setValues(current => ({ ...current, [field]: event.target.value }))} className={fieldClass} /></label>)}</div>
+    {mealItems.length > 1 ? <div className="space-y-3" role="group" aria-label="食品ごとの栄養情報"><input type="hidden" name="mealItems" value={JSON.stringify(mealItems)} />{mealItems.map((item, index) => <section key={index} className="rounded-2xl border border-cyan-100 bg-cyan-50/40 p-3"><label className="text-sm font-bold">食品名<input required value={item.name} onChange={event => setMealItems(current => current.map((value, itemIndex) => itemIndex === index ? { ...value, name: event.target.value } : value))} className={fieldClass} /></label><div className="mt-2 grid grid-cols-2 gap-2">{([['kcal', 'カロリー'], ['protein', 'たんぱく質 (g)'], ['fat', '脂質 (g)'], ['carbs', '炭水化物 (g)']] as const).map(([field, label]) => <label key={field} className="text-xs font-semibold">{label}<input required min="0" max="20000" step="0.1" type="number" value={item[field]} onChange={event => setMealItems(current => current.map((value, itemIndex) => itemIndex === index ? { ...value, [field]: Number(event.target.value) } : value))} className={fieldClass} /></label>)}</div></section>)}</div> : <div className="grid grid-cols-2 gap-2">{([['kcal', 'カロリー'], ['protein', 'たんぱく質 (g)'], ['fat', '脂質 (g)'], ['carbs', '炭水化物 (g)']] as const).map(([field, label]) => <label key={field} className="text-sm font-semibold">{label}<input required min="0" max="20000" step="0.1" type="number" name={field} value={values[field]} onChange={event => setValues(current => ({ ...current, [field]: event.target.value }))} className={fieldClass} /></label>)}</div>}
     <p className="text-xs text-gray-500">AIの栄養値は推定です。商品表示や実際の材料を優先し、必要に応じて修正してください。</p>
   </>;
 }
-const ExerciseFields = () => <><label className="block text-sm font-semibold">運動名<input autoFocus required maxLength={80} name="name" className={fieldClass} /></label><label className="block text-sm font-semibold">時間（分）<input required min="1" max="1440" type="number" name="minutes" className={fieldClass} /></label><label className="block text-sm font-semibold">消費カロリー<input required min="0" max="20000" type="number" name="kcal" className={fieldClass} /></label></>;
+const ExerciseFields = ({ initialExercise }: { initialExercise?: Exercise | null }) => <><label className="block text-sm font-semibold">運動名<input autoFocus required maxLength={80} name="name" defaultValue={initialExercise?.name} className={fieldClass} /></label><label className="block text-sm font-semibold">時間（分）<input required min="1" max="1440" type="number" name="minutes" defaultValue={initialExercise?.minutes} className={fieldClass} /></label><label className="block text-sm font-semibold">消費カロリー<input required min="0" max="20000" type="number" name="kcal" defaultValue={initialExercise?.kcal} className={fieldClass} /></label></>;
 const NumberField = ({ label, value, max, set }: { label: string; value: number | ''; max: number; set: (value: number) => void }) => <label className="block text-sm font-semibold">{label}<input type="number" min="0" max={max} step="0.1" value={value} onChange={event => set(Number(event.target.value))} className={fieldClass} /></label>;
 const DeleteButton = ({ label, onClick }: { label: string; onClick: () => void }) => <button aria-label={label} onClick={onClick} className="rounded-full p-2 text-red-500"><Trash2 size={17} /></button>;
 const Empty = () => <p className="mt-3 text-sm text-gray-400">まだ記録がありません</p>;

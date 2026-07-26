@@ -85,4 +85,38 @@ describe('HealthApp interactions', () => {
     expect(await screen.findByText('ヨーグルトとバナナ')).toBeTruthy();
     await waitFor(() => expect(screen.queryByText('ヨーグルトとベリー')).toBeNull());
   });
+
+  it('カンマ区切りの食品を個別に推定・保存・編集できる', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as { name: string };
+      const estimate = request.name === 'カレー'
+        ? { name: 'カレー', kcal: 700, protein: 20, fat: 25, carbs: 95, confidence: '中', note: '1皿分' }
+        : { name: 'ヨーグルト', kcal: 120, protein: 5, fat: 4, carbs: 16, confidence: '高', note: '1個分' };
+      return { ok: true, json: async () => ({ estimate }) };
+    }));
+    render(<HealthApp initialTab="記録" />);
+    await waitFor(() => expect(localStorage.length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: '食事を追加' }));
+    fireEvent.change(screen.getByLabelText('料理名'), { target: { value: 'カレー、ヨーグルト' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AIで栄養情報を補完' }));
+    expect(await screen.findByText('2品を個別に推定しました。それぞれの数値を確認・修正してから保存してください。')).toBeTruthy();
+    expect(screen.getByRole('group', { name: '食品ごとの栄養情報' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await screen.findByText('カレー')).toBeTruthy();
+    expect(screen.getByText('ヨーグルト')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'カレーを編集' }));
+    expect((screen.getByLabelText('カロリー') as HTMLInputElement).value).toBe('700');
+  });
+
+  it('登録済みの運動を編集できる', async () => {
+    render(<HealthApp initialTab="記録" />);
+    await waitFor(() => expect(localStorage.length).toBeGreaterThan(0));
+    const editButton = screen.getAllByRole('button', { name: /を編集/ }).find(button => /ウォーキング|ストレッチ/.test(button.getAttribute('aria-label') ?? ''))!;
+    fireEvent.click(editButton);
+    expect(screen.getByRole('dialog', { name: '運動を編集' })).toBeTruthy();
+    const minutes = screen.getByLabelText('時間（分）') as HTMLInputElement;
+    fireEvent.change(minutes, { target: { value: '45' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await screen.findByText('45分', { exact: false })).toBeTruthy();
+  });
 });
