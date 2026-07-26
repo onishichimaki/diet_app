@@ -13,15 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for Vercel production deployment
-        run: sleep 90
+        run: sleep 60
       - name: Verify Supabase configuration through production
         id: cloud
         run: |
           set -euo pipefail
-          response="$(curl --silent --show-error --retry 5 --retry-delay 15 --max-time 30 https://diet-app-chimaki.vercel.app/api/cloud-diagnostics)"
+          http_status="$(curl --silent --show-error --retry 5 --retry-delay 15 --max-time 30 --output /tmp/cloud-response --write-out '%{http_code}' https://diet-app-chimaki.vercel.app/api/cloud-diagnostics)"
+          response="$(cat /tmp/cloud-response)"
           echo "$response"
-          description="$(echo "$response" | jq -r '"ok=\(.ok) upstream=\(.upstreamStatus // 0) key=\(.keySource)/\(.keyFormat // "none") len=\(.keyLength // 0)"' | cut -c1-140)"
-          state="$(echo "$response" | jq -r 'if .ok == true and .upstreamStatus == 200 then "success" else "failure" end')"
+          if echo "$response" | jq -e . >/dev/null 2>&1; then
+            description="$(echo "$response" | jq -r '"http='"$http_status"' ok=\(.ok) upstream=\(.upstreamStatus // 0) key=\(.keySource)/\(.keyFormat // "none") len=\(.keyLength // 0)"' | cut -c1-140)"
+            state="$(echo "$response" | jq -r 'if .ok == true and .upstreamStatus == 200 then "success" else "failure" end')"
+          else
+            description="http=$http_status non-json=$(echo "$response" | tr '\n' ' ' | cut -c1-100)"
+            state="failure"
+          fi
           curl --silent --show-error --fail-with-body \
             --request POST \
             --header "Authorization: Bearer ${{ github.token }}" \
