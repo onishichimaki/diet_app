@@ -68,6 +68,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 
 VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProduction、Preview、Development用として登録し、Redeployします。旧設定との互換性のため`NEXT_PUBLIC_SUPABASE_ANON_KEY`も利用できますが、新規設定ではSupabaseの表示名と同じ`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`を使用します。`service_role`キーやデータベースパスワードは、ブラウザ用環境変数へ絶対に登録しないでください。
 
+この配備先専用の保護策として、Project URLが未設定または`xxxxxxxxxxxx.supabase.co`という説明用プレースホルダーのままの場合は、Health Pocket用の公開Project URLへ補正する。Project URLは公開識別子であり秘密鍵ではない。Publishable Keyは引き続きVercel環境変数から取得する。
+
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
 
 Supabase SDKはProject URLへ直接接続する。Service Workerは外部オリジンと`/api/*`の通信には介入しない。VercelではSupabaseの現行UIから取得したProject URLとPublishable KeyをProduction環境へ設定する。
