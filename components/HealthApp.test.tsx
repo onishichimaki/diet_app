@@ -76,6 +76,7 @@ describe('HealthApp interactions', () => {
     await waitFor(() => expect(localStorage.length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole('button', { name: 'ヨーグルトとベリーを編集' }));
     expect(screen.getByRole('dialog', { name: '食事を編集' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '食事を編集' }).className).toContain('overflow-y-auto');
     expect((document.querySelector('input[name="mealId"]') as HTMLInputElement).value).toContain('-b');
     const name = screen.getByLabelText('料理名') as HTMLInputElement;
     expect(name.value).toBe('ヨーグルトとベリー');
