@@ -24,7 +24,7 @@ Supabaseを設定した環境ではメールリンク認証を利用し、`healt
 
 Local Storageはクラウド有効時も端末キャッシュとして残す。初回ログイン時、クラウドに行があればクラウドデータを復元し、行がなければ検証済みの端末データをアップロードする。その後は変更をデバウンスしてupsertする。UIには未設定、未ログイン、同期中、同期済み、エラーの状態を表示する。
 
-ブラウザからSupabaseへ直接接続できないネットワークでも動作させるため、SDKの通信先は同一オリジンの`/api/supabase/*`とする。Route Handlerは環境変数で固定されたSupabase Project URLだけにリクエストを転送し、任意URLへのオープンプロキシにはしない。
+Supabase SDKはProject URLへ直接接続する。Service Workerは外部オリジンの通信へ介入せず、認証・DB通信はSupabase SDKの標準フローに従う。
 
 ## レポート
 

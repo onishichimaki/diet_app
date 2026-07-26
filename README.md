@@ -70,11 +70,7 @@ VercelではProject SettingsのEnvironment Variablesへ同じ2項目をProductio
 
 設定後はアプリの「健康」画面にある「クラウド同期」からメールアドレスを入力します。メールのログインリンクを開くと、クラウドにデータがない初回だけ現在の端末データを移行し、以降の変更を自動保存します。クラウドに既存データがある場合はクラウド側を端末へ復元します。
 
-ブラウザとSupabase間のネットワーク制限やCORSの影響を避けるため、Supabase SDKの通信は同一オリジンの`/api/supabase/*`から固定されたProject URLへ中継します。中継先は環境変数のSupabase URL以外に変更できず、Service WorkerもAPI通信には介入しません。
-
-中継APIはSupabase SDKのバージョンヘッダーを含むリクエスト・レスポンスヘッダーを保持し、ホップ単位のヘッダー、Cookie、Originだけを除外します。これによりOTP認証レスポンスをSDKが本来の形式で解釈できます。
-
-`/api/cloud-diagnostics`は秘密値を返さず、設定されたキーの種類・長さとSupabase Authへの疎通結果だけを返す。`work`へのpush後はGitHub ActionsがVercelのデプロイを待ち、この診断APIでProductionのクラウド設定を自動検証する。
+Supabase SDKはProject URLへ直接接続する。Service Workerは外部オリジンと`/api/*`の通信には介入しない。VercelではSupabaseの現行UIから取得したProject URLとPublishable KeyをProduction環境へ設定する。
 
 ## 技術構成
 
